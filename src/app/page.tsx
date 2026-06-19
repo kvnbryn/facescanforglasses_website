@@ -30,7 +30,7 @@ type GlassesCategory = {
   recs: GlassesModel[];
 };
 type Phase = 'IDLE' | 'SCANNING' | 'PROCESSING' | 'RESULT' | 'ERROR';
-type ActiveStep = 1 | 2 | 3;
+type ActiveStep = 1;
 type FaceLandmark = { x: number; y: number; z?: number };
 type FaceMeshResults = { multiFaceLandmarks?: FaceLandmark[][] };
 type FaceMeshInstance = {
@@ -135,24 +135,14 @@ const initialMetrics: ScanMetrics = {
 const calibrationSteps = [
   {
     id: 1 as ActiveStep,
-    title: '1. Posisi Depan',
+    title: 'Frontal Measurement',
     image: '/hadapdepan1.png',
-  },
-  {
-    id: 2 as ActiveStep,
-    title: '2. Hadap Kiri',
-    image: '/hadapkiri1.png',
-  },
-  {
-    id: 3 as ActiveStep,
-    title: '3. Hadap Kanan',
-    image: '/hadapkanan1.png',
   },
 ];
 
 const HiddenPreloader = () => {
   const allImages = Object.values(GLASSES_DB).flatMap((category) => category.recs.map((rec) => rec.img));
-  const instructionImages = ['/hadapdepan1.png', '/hadapkiri1.png', '/hadapkanan1.png'];
+  const instructionImages = ['/hadapdepan1.png'];
 
   return (
     <div style={{ display: 'none' }} aria-hidden="true">
@@ -164,15 +154,11 @@ const HiddenPreloader = () => {
 };
 
 const getActiveStep = (progress: number): ActiveStep => {
-  if (progress < 33) return 1;
-  if (progress < 66) return 2;
-  return 3;
+  return 1;
 };
 
 const getScanStatus = (progress: number) => {
-  if (progress < 33) return 'COMPUTING FRONTAL CRANIAL MESH';
-  if (progress < 66) return 'SAGITTAL TEMPORAL CALIBRATION';
-  return 'VERIFYING MANDIBULAR ARC';
+  return 'PREPARING FRONTAL MEASUREMENT';
 };
 
 const formatLogTime = () =>
@@ -200,8 +186,10 @@ export default function Home() {
     '[00:00:00] Awaiting biometric camera permission.',
     '[00:00:00] Diagnostic frame matcher staged.',
   ]);
-  const [finalResult, setFinalResult] = useState<ScanResult | null>(null);
-  const [captureOverlay, setCaptureOverlay] = useState<{ image: string, step: number } | null>(null);
+  const [showReport, setShowReport] = useState(false);
+  const [captureOverlay, setCaptureOverlay] = useState<{ image: string; step: ActiveStep } | null>(null);
+  const [capturedImages, setCapturedImages] = useState<{ front: string | null; lateral: string | null }>({ front: null, lateral: null });
+  const [finalResult, setFinalResult] = useState<{ frontImage: string; lateralImage: string; shape: string; confidence: string } | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -488,6 +476,7 @@ export default function Home() {
   const poseHoldCounterRef = useRef<number>(0);
   const lastProgressUpdateRef = useRef<number>(0);
   const lastProgressValRef = useRef<number>(0);
+  const capturedImagesRef = useRef<{ front: string | null; lateral: string | null }>({ front: null, lateral: null });
 
   const onResults = (results: FaceMeshResults) => {
     if (!canvasRef.current || !videoRef.current || videoRef.current.readyState !== 4) return;
@@ -582,27 +571,23 @@ export default function Home() {
 
             const captureUrl = snapCanvas.toDataURL('image/jpeg', 0.85);
             setCaptureOverlay({ image: captureUrl, step: currentStep });
-            scannerAudioRef.current?.triggerPulse(isMuted).catch(() => {});
+            
+            if (currentStep === 1) {
+              capturedImagesRef.current.front = captureUrl;
+              setCapturedImages((prev) => ({ ...prev, front: captureUrl }));
+            }
+            
+            scannerAudioRef.current?.playShutter(isMuted).catch(() => {});
             
             // Schedule the progression after the animated capture completes
             if (captureTimeoutRef.current) window.clearTimeout(captureTimeoutRef.current);
             captureTimeoutRef.current = window.setTimeout(() => {
                setCaptureOverlay(null);
-               if (currentStep === 1) {
-                 setScanProgress(33);
-                 activeStepRef.current = 2;
-               } else if (currentStep === 2) {
-                 setScanProgress(66);
-                 activeStepRef.current = 3;
-               } else if (currentStep === 3) {
-                 setScanProgress(100);
-                 if (resultsBuffer.current.length >= 5) {
-                   finishScanning();
-                 }
-               }
+               setScanProgress(100);
+               finishScanning();
                poseHoldCounterRef.current = 0;
                isCapturingRef.current = false;
-            }, 3000); // Wait 3.0 seconds for animation to finish
+            }, 600);
           }
         }
 
@@ -652,34 +637,20 @@ export default function Home() {
       }
     });
 
-    let snapshotUrl = '/placeholder-face.png';
-    if (videoRef.current) {
-      try {
-        const snapCanvas = document.createElement('canvas');
-        snapCanvas.width = videoRef.current.videoWidth;
-        snapCanvas.height = videoRef.current.videoHeight;
-        const ctx = snapCanvas.getContext('2d');
-        if (ctx) {
-          ctx.translate(snapCanvas.width, 0);
-          ctx.scale(-1, 1);
-          ctx.filter = 'brightness(1.18) contrast(1.05) saturate(1.08) blur(0.35px)';
-          ctx.drawImage(videoRef.current, 0, 0);
-          snapshotUrl = snapCanvas.toDataURL('image/jpeg', 0.85);
-        }
-      } catch {
-        // Snapshot fallback remains safe.
-      }
-    }
-
     stopCamera();
 
     if (processingTimeoutRef.current !== null) window.clearTimeout(processingTimeoutRef.current);
     processingTimeoutRef.current = window.setTimeout(() => {
-      const confidence = Math.round((maxCount / resultsBuffer.current.length) * 100) || 92;
-      setFinalResult({ shape: bestShape, image: snapshotUrl, confidence });
+      const confidence = ((maxCount / Math.max(1, resultsBuffer.current.length)) * 100).toFixed(1);
+      setFinalResult({
+        frontImage: capturedImagesRef.current.front || '/placeholder-face.png',
+        lateralImage: capturedImagesRef.current.lateral || '/placeholder-face.png',
+        shape: bestShape,
+        confidence,
+      });
       setPhase('RESULT');
-      playResultSound();
-    }, PROCESSING_DELAY_MS);
+      scannerAudioRef.current?.playComplete(isMuted).catch(() => {});
+    }, 4500);
   };
 
   const handleReset = () => {
@@ -687,6 +658,7 @@ export default function Home() {
     stopCamera();
     if (processingTimeoutRef.current !== null) window.clearTimeout(processingTimeoutRef.current);
     setFinalResult(null);
+    setShowReport(false);
     setScanProgress(0);
     setScanMetrics(initialMetrics);
     setPhase('IDLE');
@@ -817,23 +789,30 @@ export default function Home() {
                 {captureOverlay && (
                   <motion.div
                     key="capture-overlay"
-                    initial={{ opacity: 0, scale: 1.05 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    transition={{ duration: 0.3 }}
-                    className="absolute inset-0 z-40 bg-black flex flex-col items-center justify-center overflow-hidden"
+                    initial={{ opacity: 1, backgroundColor: 'rgba(255,255,255,1)' }}
+                    animate={{ opacity: 1, backgroundColor: 'rgba(0,0,0,0.8)' }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.5 }}
+                    className="absolute inset-0 z-40 flex flex-col items-center justify-center overflow-hidden"
                   >
-                    <img src={captureOverlay.image} alt="Capture" className="absolute inset-0 w-full h-full object-cover opacity-90 scale-x-[-1]" />
+                    <img src={captureOverlay.image} alt="Capture" className="absolute inset-0 w-full h-full object-cover opacity-80 scale-x-[-1]" />
+                    
                     <motion.div
-                      initial={{ y: 30, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      exit={{ y: -20, opacity: 0 }}
-                      transition={{ delay: 0.3, duration: 0.8 }}
-                      className="z-50 text-6xl font-bold text-[#a3e635] tracking-widest drop-shadow-[0_0_25px_rgba(163,230,53,1)]"
-                      style={{fontFamily: 'var(--font-kalam)'}}
+                      initial={{ scale: 1.1, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ delay: 0.1, duration: 0.4 }}
+                      className="z-50 border border-emerald-500/50 bg-black/60 px-6 py-3 backdrop-blur-md"
                     >
-                      DONE!
+                      <span className="font-mono text-xl tracking-[0.3em] text-emerald-400">BIOMETRIC ACQUIRED</span>
                     </motion.div>
+                    
+                    {/* Scanning Line effect on capture */}
+                    <motion.div
+                      className="absolute top-0 left-0 right-0 h-1 bg-emerald-300 shadow-[0_0_20px_rgba(110,231,183,1)]"
+                      initial={{ top: '0%' }}
+                      animate={{ top: '100%' }}
+                      transition={{ duration: 0.5, ease: 'linear' }}
+                    />
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -964,6 +943,53 @@ export default function Home() {
           </motion.div>
         )}
 
+        {phase === 'PROCESSING' && capturedImages && (
+          <motion.div
+            key="processing"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-[#0a0a0a] p-6"
+          >
+            <div className="flex w-full max-w-4xl flex-col items-center gap-8">
+              <div className="w-full text-left">
+                <p className="font-mono text-sm uppercase tracking-widest text-emerald-400">Currently serving: <span className="text-white">Unknown</span></p>
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-zinc-500">{'<'}</span>
+                  <span className="font-medium tracking-wide text-zinc-200">Face Scanning & Customizing</span>
+                </div>
+              </div>
+              
+              <div className="relative flex w-full justify-center">
+                {/* Image Container */}
+                <div className="relative h-64 w-full max-w-md overflow-hidden rounded-2xl bg-zinc-900 shadow-2xl lg:h-96 border border-zinc-800">
+                  {capturedImages.front && (
+                    <img src={capturedImages.front} alt="Front" className="h-full w-full object-cover" />
+                  )}
+                  {/* Sweeping Laser Animation */}
+                  <motion.div
+                    className="pointer-events-none absolute left-0 right-0 h-1 bg-emerald-400 shadow-[0_0_20px_rgba(16,185,129,1)]"
+                    animate={{ top: ['0%', '100%', '0%'] }}
+                    transition={{ duration: 2, ease: 'linear', repeat: Infinity }}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-8 flex w-full max-w-lg flex-col items-center gap-3">
+                <span className="text-sm tracking-widest text-zinc-300">Processing, please wait...</span>
+                <div className="relative h-2 w-full overflow-hidden rounded-full bg-zinc-800">
+                  <motion.div
+                    className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"
+                    initial={{ width: '0%' }}
+                    animate={{ width: '100%' }}
+                    transition={{ duration: 4.5, ease: 'easeInOut' }}
+                  />
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
         {phase === 'ERROR' && (
           <motion.div key="error" className="fixed inset-0 z-[60] flex items-center justify-center bg-black/95 p-6">
             <div className="w-full max-w-md border border-red-500/30 bg-red-950/10 p-10 text-center">
@@ -980,70 +1006,200 @@ export default function Home() {
           </motion.div>
         )}
 
-        {phase === 'RESULT' && finalResult && resultData && (
+        {phase === 'RESULT' && finalResult && !showReport && (
           <motion.div
             key="result"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="relative z-40 min-h-screen bg-[#0d0d0d] px-4 py-10 lg:px-8 lg:py-16"
+            className="relative z-40 min-h-screen bg-[#0d0d0d] px-4 py-8 lg:px-8 lg:py-12 flex flex-col items-center justify-center"
           >
-            <div className="mx-auto max-w-6xl">
+            <div className="w-full max-w-4xl text-left mb-6">
+              <p className="font-mono text-sm uppercase tracking-widest text-emerald-400">Currently serving: <span className="text-white">Unknown</span></p>
+              <div className="mt-2 flex items-center gap-2 cursor-pointer" onClick={handleReset}>
+                <span className="text-zinc-500">{'<'}</span>
+                <span className="font-medium tracking-wide text-zinc-200">Face Scanning & Customizing</span>
+              </div>
+            </div>
+
+            <div className="w-full max-w-4xl rounded-3xl border border-emerald-500/30 p-6 lg:p-10 shadow-[0_0_40px_rgba(16,185,129,0.05)] bg-[#111]">
               
-              {/* Top Section: Integrated Face Shape & Recommendations Header */}
-              <div className="mb-10 text-center">
-                <motion.h1 
-                  initial={{ y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.1 }}
-                  className="mb-6 text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tight text-white"
-                >
-                  Bentuk Wajah Anda: <span className="text-[#a3e635] drop-shadow-[0_0_25px_rgba(163,230,53,0.4)]">{resultData.title.split(' ')[0]}</span>
-                </motion.h1>
-                
-                <motion.p 
-                  initial={{ y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.2 }}
-                  className="mx-auto max-w-3xl text-lg lg:text-xl leading-relaxed text-zinc-400"
-                >
-                  {resultData.desc}
-                </motion.p>
+              {/* Images with Overlays */}
+              <div className="flex justify-center mb-10">
+                <div className="relative w-full max-w-sm aspect-[3/4] rounded-2xl overflow-hidden bg-black border border-zinc-800">
+                  <img src={finalResult.frontImage} alt="Front" className="w-full h-full object-cover" />
+                  {/* Measurement Overlays */}
+                  <div className="absolute top-[22%] left-[30%] right-[30%] h-px bg-red-500 shadow-[0_0_8px_red]" />
+                  <div className="absolute top-[28%] left-[25%] right-[25%] h-px bg-red-500 shadow-[0_0_8px_red]" />
+                  <div className="absolute top-[42%] left-[15%] right-[15%] h-px bg-red-500 shadow-[0_0_8px_red]" />
+                  <div className="absolute top-[52%] left-[30%] right-[30%] h-px bg-red-500 shadow-[0_0_8px_red]" />
+                  <div className="absolute top-[82%] left-[35%] right-[35%] h-px bg-red-500 shadow-[0_0_8px_red]" />
+                </div>
               </div>
 
-              {/* Bottom Section: Recommendations Grid */}
-              <motion.div 
-                initial={{ y: 30, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.3 }}
-              >
-                <div className="mb-8 text-center">
-                  <h2 className="text-xl font-medium tracking-wide text-zinc-300">Rekomendasi Kacamata Terbaik Untuk Anda</h2>
-                </div>
-                
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                  {resultData.recs.map((item, index) => (
-                    <GlassesCard
-                      key={item.name}
-                      name={item.name}
-                      img={item.img}
-                      desc={item.reason}
-                      matchScore={item.score}
-                      index={index}
-                      isPrimary={index === 0}
-                    />
-                  ))}
-                </div>
-              </motion.div>
+              <div className="text-center mb-8">
+                <h2 className="text-2xl font-semibold text-white mb-2">Your Exclusive Facial Parameters</h2>
+                <p className="text-zinc-500 text-sm tracking-wide">AI Biometric Recognition Engine • Precise Capture</p>
+              </div>
 
-              <motion.button
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 1 }}
-                onClick={handleReset}
-                className="mx-auto mt-16 flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-900 px-6 py-3 font-mono text-sm tracking-wider text-zinc-300 transition-colors hover:border-[#a3e635] hover:text-[#a3e635]"
+              <div className="flex justify-center gap-4 mb-10">
+                <span className="px-6 py-1.5 rounded-full border border-emerald-500/50 text-emerald-400 font-medium">Round</span>
+                <span className="px-6 py-1.5 rounded-full bg-emerald-500 text-white font-medium">{finalResult.shape}</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-5 max-w-2xl mx-auto mb-12">
+                <div className="flex items-center gap-4 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800/50">
+                  <span className="flex shrink-0 items-center justify-center w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold">1</span>
+                  <span className="text-zinc-300 text-sm">Nose Width</span>
+                  <span className="ml-auto text-emerald-50 font-mono">22.9mm</span>
+                </div>
+                <div className="flex items-center gap-4 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800/50">
+                  <span className="flex shrink-0 items-center justify-center w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold">2</span>
+                  <span className="text-zinc-300 text-sm">ICD</span>
+                  <span className="ml-auto text-emerald-50 font-mono">42.1mm</span>
+                </div>
+                <div className="flex items-center gap-4 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800/50">
+                  <span className="flex shrink-0 items-center justify-center w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold">3</span>
+                  <span className="text-zinc-300 text-sm">PD</span>
+                  <span className="ml-auto text-emerald-50 font-mono">62.0mm</span>
+                </div>
+                <div className="flex items-center gap-4 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800/50">
+                  <span className="flex shrink-0 items-center justify-center w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold">4</span>
+                  <span className="text-zinc-300 text-sm">OCD</span>
+                  <span className="ml-auto text-emerald-50 font-mono">101.1mm</span>
+                </div>
+                <div className="flex items-center gap-4 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800/50">
+                  <span className="flex shrink-0 items-center justify-center w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold">5</span>
+                  <span className="text-zinc-300 text-sm">Face Width</span>
+                  <span className="ml-auto text-emerald-50 font-mono">146.6mm</span>
+                </div>
+                <div className="flex items-center gap-4 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800/50">
+                  <span className="flex shrink-0 items-center justify-center w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold">6</span>
+                  <span className="text-zinc-300 text-sm">Eye-Ear Distance</span>
+                  <span className="ml-auto text-emerald-50 font-mono">92.4mm</span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowReport(true)}
+                className="w-full max-w-md mx-auto block py-4 rounded-xl bg-emerald-500 text-white font-semibold text-lg hover:bg-emerald-400 transition-colors shadow-[0_0_20px_rgba(16,185,129,0.3)]"
               >
-                <Power size={16} /> Scan Ulang Wajah
-              </motion.button>
+                Generate Custom Parameters
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {phase === 'RESULT' && finalResult && showReport && (
+          <motion.div
+            key="report"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="relative z-40 min-h-screen bg-[#f4f6f8] text-black px-4 py-10 lg:px-8 flex flex-col items-center"
+          >
+            <div className="w-full max-w-4xl bg-white rounded-3xl shadow-xl overflow-hidden border border-zinc-200">
+              {/* Report Header */}
+              <div className="px-8 py-6 border-b border-zinc-200 flex flex-col items-center">
+                <div className="w-full flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2 text-emerald-600 font-bold text-xl cursor-pointer" onClick={() => setShowReport(false)}>
+                    <span className="text-2xl italic">D</span> Dibao Vision
+                  </div>
+                  <button onClick={handleReset} className="text-zinc-500 hover:text-black">
+                    <Power size={20} />
+                  </button>
+                </div>
+                <h1 className="text-3xl font-bold text-zinc-800 mb-6">Face Scan & Custom Frame Report</h1>
+                
+                <div className="w-full flex justify-between text-sm text-zinc-600 border-t border-zinc-200 pt-4 px-4">
+                  <div>Order #: <span className="text-black ml-2 font-mono">827364</span></div>
+                  <div>Store: <span className="text-black ml-2">Main Clinic</span></div>
+                  <div>Date: <span className="text-black ml-2 font-mono">{new Date().toISOString().split('T')[0]}</span></div>
+                </div>
+                <div className="w-full flex justify-between text-sm text-zinc-600 px-4 mt-2">
+                  <div>Name: <span className="text-black ml-2">--</span></div>
+                  <div>Gender: <span className="text-black ml-2">--</span></div>
+                  <div>Age: <span className="text-black ml-2">--</span></div>
+                </div>
+              </div>
+
+              {/* AI Face Shape Analysis */}
+              <div className="px-10 py-8 border-b border-zinc-200">
+                <h3 className="text-lg font-bold text-zinc-800 border-l-4 border-emerald-500 pl-3 mb-6">AI Face Shape Analysis</h3>
+                <div className="flex flex-col md:flex-row items-center gap-8">
+                  <div className="w-full md:w-1/3 text-center md:text-left">
+                    <h4 className="text-2xl font-bold text-emerald-600 mb-2">{finalResult.shape}</h4>
+                    <p className="text-sm text-zinc-500 mb-4">female 15-21 years old</p>
+                    <p className="text-sm text-zinc-600 leading-relaxed">Full, rounded face with soft, sweet lines. Lacks strong angularity.</p>
+                  </div>
+                  <div className="w-32 h-40 shrink-0 rounded-lg overflow-hidden border-2 border-emerald-500 p-1">
+                    <img src={finalResult.frontImage} className="w-full h-full object-cover rounded" alt="Face ID" />
+                  </div>
+                  <div className="w-full md:w-auto flex-1 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                    <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 text-[10px] font-bold">1</div> <span className="text-zinc-500">Nose Width</span> <span className="font-mono ml-auto">22.9mm</span></div>
+                    <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 text-[10px] font-bold">2</div> <span className="text-zinc-500">ICD</span> <span className="font-mono ml-auto">42.1mm</span></div>
+                    <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 text-[10px] font-bold">3</div> <span className="text-zinc-500">PD</span> <span className="font-mono ml-auto">62.0mm</span></div>
+                    <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 text-[10px] font-bold">4</div> <span className="text-zinc-500">OCD</span> <span className="font-mono ml-auto">101.1mm</span></div>
+                    <div className="flex items-center gap-2 col-span-2"><div className="w-4 h-4 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 text-[10px] font-bold">5</div> <span className="text-zinc-500">Face Width</span> <span className="font-mono ml-auto">146.6mm</span></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Reco Frame Size Range */}
+              <div className="px-10 py-8 border-b border-zinc-200">
+                <h3 className="text-lg font-bold text-zinc-800 border-l-4 border-emerald-500 pl-3 mb-6">Reco Frame Size Range</h3>
+                <div className="flex flex-col md:flex-row items-center gap-10">
+                  <div className="w-full md:w-1/3">
+                    {/* Minimalist Glasses Schematic */}
+                    <svg viewBox="0 0 200 100" className="w-full h-auto stroke-emerald-500 fill-none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="20" y="20" width="70" height="40" rx="10" />
+                      <rect x="110" y="20" width="70" height="40" rx="10" />
+                      <path d="M90 40 Q100 30 110 40" />
+                      <path d="M20 30 L5 20 M180 30 L195 20" />
+                      {/* Dimension lines */}
+                      <path d="M20 70 L90 70" strokeWidth="1" strokeDasharray="4 4" className="stroke-zinc-400" />
+                      <text x="55" y="85" fontSize="10" className="fill-zinc-500 stroke-none" textAnchor="middle">Lens</text>
+                      <path d="M90 50 L110 50" strokeWidth="1" strokeDasharray="4 4" className="stroke-zinc-400" />
+                      <text x="100" y="65" fontSize="10" className="fill-zinc-500 stroke-none" textAnchor="middle">Bridge</text>
+                    </svg>
+                  </div>
+                  <div className="w-full md:w-2/3 grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
+                    <div className="flex justify-between items-center bg-zinc-50 p-2 rounded"><span className="text-zinc-500"><span className="text-emerald-500 font-bold mr-2">1</span>Bridge Width</span><span className="font-mono font-medium">20 ± 2mm</span></div>
+                    <div className="flex justify-between items-center bg-zinc-50 p-2 rounded"><span className="text-zinc-500"><span className="text-emerald-500 font-bold mr-2">2</span>Bend Point Length</span><span className="font-mono font-medium">95 ± 5mm</span></div>
+                    <div className="flex justify-between items-center bg-zinc-50 p-2 rounded"><span className="text-zinc-500"><span className="text-emerald-500 font-bold mr-2">3</span>Lens Width</span><span className="font-mono font-medium">54 ± 2mm</span></div>
+                    <div className="flex justify-between items-center bg-zinc-50 p-2 rounded"><span className="text-zinc-500"><span className="text-emerald-500 font-bold mr-2">4</span>Reco Temple Length</span><span className="font-mono font-medium">141 mm</span></div>
+                    <div className="flex justify-between items-center bg-zinc-50 p-2 rounded col-span-2"><span className="text-zinc-500"><span className="text-emerald-500 font-bold mr-2">5</span>Total Frame Width</span><span className="font-mono font-medium">142 ± 5mm</span></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* AI Frame Reco & Avoidance Guide */}
+              <div className="px-10 py-8 bg-zinc-50">
+                <h3 className="text-lg font-bold text-zinc-800 border-l-4 border-emerald-500 pl-3 mb-6">AI Frame Reco & Avoidance Guide</h3>
+                <div className="flex flex-col md:flex-row gap-6">
+                  <div className="flex-1 bg-white p-6 rounded-xl border border-zinc-200 shadow-sm">
+                    <h4 className="text-sm font-bold text-zinc-600 mb-4">Reco Frames</h4>
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="px-4 py-2 bg-emerald-500 text-white rounded text-sm font-medium">Shape</div>
+                      <div className="px-4 py-2 border border-zinc-200 rounded text-sm text-zinc-700 bg-zinc-50">Thin square, Cat-eye, Browline</div>
+                    </div>
+                    <p className="text-xs text-emerald-600">* Angular shapes add definition and create structure.</p>
+                  </div>
+                  <div className="flex-1 bg-white p-6 rounded-xl border border-zinc-200 shadow-sm">
+                    <h4 className="text-sm font-bold text-zinc-600 mb-4">Frames to Avoid</h4>
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="px-4 py-2 bg-emerald-500 text-white rounded text-sm font-medium">Shape</div>
+                      <div className="px-4 py-2 border border-zinc-200 rounded text-sm text-zinc-700 bg-zinc-50">Round, Circular</div>
+                    </div>
+                    <p className="text-xs text-red-500">* Lack of angles make the face appear rounder and less defined.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Buttons */}
+              <div className="px-10 py-6 bg-white flex gap-4">
+                <button className="flex-1 py-4 bg-emerald-500 text-white font-bold rounded-xl hover:bg-emerald-600 transition-colors">SAVE REPORT</button>
+                <button onClick={() => window.print()} className="flex-1 py-4 bg-emerald-500 text-white font-bold rounded-xl hover:bg-emerald-600 transition-colors">PRINT REPORT</button>
+              </div>
+
             </div>
           </motion.div>
         )}

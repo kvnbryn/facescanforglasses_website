@@ -36,6 +36,7 @@ export type ScannerAudioController = {
   setMuted: (muted: boolean) => void;
   stopScan: () => void;
   playComplete: (muted: boolean) => Promise<void>;
+  playShutter: (muted: boolean) => Promise<void>;
   destroy: () => void;
 };
 
@@ -239,6 +240,30 @@ export const createScannerAudioController = (): ScannerAudioController => {
     }, 1400);
   };
 
+  const playShutter = async (muted: boolean) => {
+    if (muted) return;
+    const audioContext = await ensureContext();
+    if (!audioContext) return;
+
+    const now = audioContext.currentTime;
+    const master = audioContext.createGain();
+    master.gain.setValueAtTime(0.0001, now);
+    master.gain.linearRampToValueAtTime(0.4, now + 0.01);
+    master.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
+    master.connect(audioContext.destination);
+
+    const noise = audioContext.createBufferSource();
+    const noiseFilter = audioContext.createBiquadFilter();
+    noise.buffer = createNoiseBuffer(audioContext);
+    noiseFilter.type = 'highpass';
+    noiseFilter.frequency.value = 3000;
+    
+    noise.connect(noiseFilter);
+    noiseFilter.connect(master);
+    noise.start(now);
+    noise.stop(now + 0.15);
+  };
+
   return {
     unlock: async () => {
       await ensureContext();
@@ -284,6 +309,7 @@ export const createScannerAudioController = (): ScannerAudioController => {
     setMuted,
     stopScan,
     playComplete,
+    playShutter,
     destroy: () => {
       stopScan();
       context?.close().catch(() => {});
