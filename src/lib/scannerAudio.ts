@@ -246,22 +246,35 @@ export const createScannerAudioController = (): ScannerAudioController => {
     if (!audioContext) return;
 
     const now = audioContext.currentTime;
-    const master = audioContext.createGain();
-    master.gain.setValueAtTime(0.0001, now);
-    master.gain.linearRampToValueAtTime(0.4, now + 0.01);
-    master.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
-    master.connect(audioContext.destination);
 
-    const noise = audioContext.createBufferSource();
-    const noiseFilter = audioContext.createBiquadFilter();
-    noise.buffer = createNoiseBuffer(audioContext);
-    noiseFilter.type = 'highpass';
-    noiseFilter.frequency.value = 3000;
+    // 1. Mechanical click (high frequency short burst)
+    const osc = audioContext.createOscillator();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(4000, now);
+    osc.frequency.exponentialRampToValueAtTime(100, now + 0.05);
     
-    noise.connect(noiseFilter);
-    noiseFilter.connect(master);
+    const oscGain = audioContext.createGain();
+    oscGain.gain.setValueAtTime(0.0001, now);
+    oscGain.gain.linearRampToValueAtTime(0.3, now + 0.01);
+    oscGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
+    
+    osc.connect(oscGain);
+    oscGain.connect(audioContext.destination);
+    osc.start(now);
+    osc.stop(now + 0.07);
+
+    // 2. Mirror slap noise
+    const noise = audioContext.createBufferSource();
+    noise.buffer = createNoiseBuffer(audioContext);
+    const noiseGain = audioContext.createGain();
+    noiseGain.gain.setValueAtTime(0.0001, now);
+    noiseGain.gain.linearRampToValueAtTime(0.15, now + 0.02);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+    
+    noise.connect(noiseGain);
+    noiseGain.connect(audioContext.destination);
     noise.start(now);
-    noise.stop(now + 0.15);
+    noise.stop(now + 0.13);
   };
 
   return {
