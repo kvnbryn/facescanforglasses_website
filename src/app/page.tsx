@@ -224,7 +224,7 @@ export default function Home() {
   const [capturedImages, setCapturedImages] = useState<{ front: string | null }>({ front: null });
   const [finalResult, setFinalResult] = useState<{ 
     frontImage: string; 
-    shape: string; 
+    shape: FaceShape; 
     confidence: string;
     lines: { top: string; left: string; width: string }[];
     metrics: Record<string, string>;
