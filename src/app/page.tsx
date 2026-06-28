@@ -390,6 +390,7 @@ export default function Home() {
   };
 
   const initFaceMesh = async () => {
+    if (faceMeshRef.current) return;
     setIsInitializing(true);
 
     const waitForScript = new Promise<void>((resolve, reject) => {
@@ -427,8 +428,6 @@ export default function Home() {
 
       faceMesh.onResults(onResults);
       faceMeshRef.current = faceMesh;
-
-      await startCamera();
     } catch (e) {
       console.error('AI Error:', e);
       setErrorMessage('Gagal memuat AI Engine. Periksa koneksi internet.');
@@ -445,10 +444,9 @@ export default function Home() {
     setPhase('SCANNING');
     setScanProgress(0);
     
-    // Set a timeout to simulate loading AI engine
     setIsInitializing(true);
-    await startCamera(facingMode);
     await initFaceMesh();
+    await startCamera(facingMode);
   };
 
   const startDetectionLoop = () => {
