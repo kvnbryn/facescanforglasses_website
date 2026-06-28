@@ -1,16 +1,6 @@
-type AudioWindow = Window &
-  typeof globalThis & {
-    webkitAudioContext?: typeof AudioContext;
-  };
-
-type ScanGraph = {
-  context: AudioContext;
-  master: GainNode;
-  sources: AudioScheduledSourceNode[];
-  pulseTimer: number | null;
+type AudioWindow = Window & typeof globalThis & {
+  webkitAudioContext?: typeof AudioContext;
 };
-
-const TARGET_SCAN_VOLUME = 0.24;
 
 const getAudioContextCtor = () => {
   if (typeof window === 'undefined') return null;
@@ -21,11 +11,9 @@ const getAudioContextCtor = () => {
 const createNoiseBuffer = (context: AudioContext) => {
   const buffer = context.createBuffer(1, context.sampleRate * 2, context.sampleRate);
   const data = buffer.getChannelData(0);
-
   for (let i = 0; i < data.length; i += 1) {
     data[i] = (Math.random() * 2 - 1) * 0.35;
   }
-
   return buffer;
 };
 
@@ -35,6 +23,7 @@ export type ScannerAudioController = {
   triggerPulse: (muted: boolean) => Promise<void>;
   setMuted: (muted: boolean) => void;
   stopScan: () => void;
+  playProcessing: (muted: boolean) => Promise<void>;
   playComplete: (muted: boolean) => Promise<void>;
   playShutter: (muted: boolean) => Promise<void>;
   destroy: () => void;
@@ -42,291 +31,129 @@ export type ScannerAudioController = {
 
 export const createScannerAudioController = (): ScannerAudioController => {
   let context: AudioContext | null = null;
-  let graph: ScanGraph | null = null;
+  let isMutedState = false;
 
   const ensureContext = async () => {
     if (context) {
       if (context.state === 'suspended') await context.resume();
       return context;
     }
-
     const AudioContextCtor = getAudioContextCtor();
     if (!AudioContextCtor) return null;
-
     context = new AudioContextCtor();
     if (context.state === 'suspended') await context.resume();
     return context;
   };
 
-  const setMuted = (muted: boolean) => {
-    if (!graph) return;
+  const speak = (text: string) => {
+    if (isMutedState || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    utterance.pitch = 1.0;
+    utterance.rate = 1.0;
+    
+    const voices = window.speechSynthesis.getVoices();
+    const preferredVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Samantha')));
+    if (preferredVoice) utterance.voice = preferredVoice;
+    
+    window.speechSynthesis.speak(utterance);
+  };
 
-    const now = graph.context.currentTime;
-    graph.master.gain.cancelScheduledValues(now);
-    graph.master.gain.setTargetAtTime(muted ? 0 : TARGET_SCAN_VOLUME, now, 0.08);
+  const setMuted = (muted: boolean) => {
+    isMutedState = muted;
+    if (muted && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
   };
 
   const stopScan = () => {
-    if (!graph) return;
-
-    const activeGraph = graph;
-    graph = null;
-
-    if (activeGraph.pulseTimer !== null) {
-      window.clearInterval(activeGraph.pulseTimer);
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
     }
-
-    const now = activeGraph.context.currentTime;
-    activeGraph.master.gain.cancelScheduledValues(now);
-    activeGraph.master.gain.setTargetAtTime(0.0001, now, 0.08);
-
-    activeGraph.sources.forEach((source) => {
-      try {
-        source.stop(now + 0.2);
-      } catch {
-        // Source may have already ended.
-      }
-    });
-
-    window.setTimeout(() => {
-      try {
-        activeGraph.master.disconnect();
-      } catch {
-        // The node can already be disconnected on rapid reset.
-      }
-    }, 350);
-  };
-
-  const scheduleSoftPulse = (activeGraph: ScanGraph) => {
-    const { context: audioContext, master } = activeGraph;
-    const now = audioContext.currentTime;
-
-    const pulse = audioContext.createBufferSource();
-    const pulseGain = audioContext.createGain();
-    const pulseFilter = audioContext.createBiquadFilter();
-    const tick = audioContext.createOscillator();
-    const tickGain = audioContext.createGain();
-
-    pulse.buffer = createNoiseBuffer(audioContext);
-    pulseFilter.type = 'bandpass';
-    pulseFilter.frequency.value = 1150;
-    pulseFilter.Q.value = 1.8;
-
-    pulseGain.gain.setValueAtTime(0.0001, now);
-    pulseGain.gain.linearRampToValueAtTime(0.052, now + 0.02);
-    pulseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
-
-    tick.type = 'sine';
-    tick.frequency.setValueAtTime(880, now);
-    tick.frequency.exponentialRampToValueAtTime(1320, now + 0.08);
-    tickGain.gain.setValueAtTime(0.0001, now);
-    tickGain.gain.linearRampToValueAtTime(0.032, now + 0.018);
-    tickGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.13);
-
-    pulse.connect(pulseFilter);
-    pulseFilter.connect(pulseGain);
-    pulseGain.connect(master);
-    tick.connect(tickGain);
-    tickGain.connect(master);
-
-    pulse.start(now);
-    tick.start(now);
-    pulse.stop(now + 0.2);
-    tick.stop(now + 0.16);
   };
 
   const startScan = async (muted: boolean) => {
-    const audioContext = await ensureContext();
-    if (!audioContext || graph) {
-      setMuted(muted);
-      return;
-    }
+    setMuted(muted);
+    await ensureContext();
+    speak("Start scanning.");
+  };
 
-    const now = audioContext.currentTime;
-    const master = audioContext.createGain();
-    master.gain.setValueAtTime(0.0001, now);
-    master.gain.linearRampToValueAtTime(muted ? 0.0001 : TARGET_SCAN_VOLUME, now + 0.6);
-    master.connect(audioContext.destination);
-
-    const lowHum = audioContext.createOscillator();
-    const lowHumGain = audioContext.createGain();
-    lowHum.type = 'sine';
-    lowHum.frequency.value = 54;
-    lowHumGain.gain.value = 0.26;
-    lowHum.connect(lowHumGain);
-    lowHumGain.connect(master);
-
-    const warmPad = audioContext.createOscillator();
-    const warmPadGain = audioContext.createGain();
-    warmPad.type = 'sine';
-    warmPad.frequency.value = 146.83;
-    warmPadGain.gain.value = 0.038;
-    warmPad.connect(warmPadGain);
-    warmPadGain.connect(master);
-
-    const airTone = audioContext.createOscillator();
-    const airToneGain = audioContext.createGain();
-    airTone.type = 'sine';
-    airTone.frequency.value = 293.66;
-    airToneGain.gain.value = 0.018;
-    airTone.connect(airToneGain);
-    airToneGain.connect(master);
-
-    const noise = audioContext.createBufferSource();
-    const noiseGain = audioContext.createGain();
-    const noiseFilter = audioContext.createBiquadFilter();
-    noise.buffer = createNoiseBuffer(audioContext);
-    noise.loop = true;
-    noiseFilter.type = 'lowpass';
-    noiseFilter.frequency.value = 2400;
-    noiseFilter.Q.value = 0.35;
-    noiseGain.gain.value = 0.045;
-    noise.connect(noiseFilter);
-    noiseFilter.connect(noiseGain);
-    noiseGain.connect(master);
-
-    const sources = [lowHum, warmPad, airTone, noise];
-    sources.forEach((source) => source.start(now));
-
-    graph = {
-      context: audioContext,
-      master,
-      sources,
-      pulseTimer: null,
-    };
-
-    scheduleSoftPulse(graph);
-    graph.pulseTimer = window.setInterval(() => {
-      if (graph) scheduleSoftPulse(graph);
-    }, 720);
+  const playProcessing = async (muted: boolean) => {
+    setMuted(muted);
+    speak("Analyzing biometrics and matching frames.");
   };
 
   const playComplete = async (muted: boolean) => {
-    if (muted) return;
-
-    const audioContext = await ensureContext();
-    if (!audioContext) return;
-
-    const now = audioContext.currentTime;
-    const master = audioContext.createGain();
-    master.gain.setValueAtTime(0.0001, now);
-    master.gain.linearRampToValueAtTime(0.11, now + 0.05);
-    master.gain.exponentialRampToValueAtTime(0.0001, now + 0.9);
-    master.connect(audioContext.destination);
-
-    [392, 587.33].forEach((frequency, index) => {
-      const tone = audioContext.createOscillator();
-      const toneGain = audioContext.createGain();
-      const start = now + index * 0.08;
-
-      tone.type = 'sine';
-      tone.frequency.setValueAtTime(frequency, start);
-      toneGain.gain.setValueAtTime(0.0001, start);
-      toneGain.gain.linearRampToValueAtTime(0.045, start + 0.04);
-      toneGain.gain.exponentialRampToValueAtTime(0.0001, start + 0.55);
-
-      tone.connect(toneGain);
-      toneGain.connect(master);
-      tone.start(start);
-      tone.stop(start + 0.62);
-    });
-
-    window.setTimeout(() => {
-      try {
-        master.disconnect();
-      } catch {
-        // The node may already be disconnected if the page reset quickly.
-      }
-    }, 1400);
+    setMuted(muted);
+    speak("Scan completed.");
   };
 
   const playShutter = async (muted: boolean) => {
+    setMuted(muted);
     if (muted) return;
     const audioContext = await ensureContext();
     if (!audioContext) return;
 
     const now = audioContext.currentTime;
 
-    // 1. Mechanical click (high frequency short burst)
-    const osc = audioContext.createOscillator();
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(4000, now);
-    osc.frequency.exponentialRampToValueAtTime(100, now + 0.05);
-    
-    const oscGain = audioContext.createGain();
-    oscGain.gain.setValueAtTime(0.0001, now);
-    oscGain.gain.linearRampToValueAtTime(0.3, now + 0.01);
-    oscGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
-    
-    osc.connect(oscGain);
-    oscGain.connect(audioContext.destination);
-    osc.start(now);
-    osc.stop(now + 0.07);
+    // High frequency click (mechanical part 1)
+    const osc1 = audioContext.createOscillator();
+    osc1.type = 'square';
+    osc1.frequency.setValueAtTime(6000, now);
+    osc1.frequency.exponentialRampToValueAtTime(100, now + 0.02);
+    const gain1 = audioContext.createGain();
+    gain1.gain.setValueAtTime(0, now);
+    gain1.gain.linearRampToValueAtTime(0.8, now + 0.005);
+    gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.03);
+    osc1.connect(gain1);
+    gain1.connect(audioContext.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.04);
 
-    // 2. Mirror slap noise
+    // Lower frequency thud (mechanical part 2)
+    const osc2 = audioContext.createOscillator();
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(400, now + 0.03);
+    osc2.frequency.exponentialRampToValueAtTime(50, now + 0.08);
+    const gain2 = audioContext.createGain();
+    gain2.gain.setValueAtTime(0, now + 0.03);
+    gain2.gain.linearRampToValueAtTime(0.6, now + 0.035);
+    gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+    osc2.connect(gain2);
+    gain2.connect(audioContext.destination);
+    osc2.start(now + 0.03);
+    osc2.stop(now + 0.11);
+
+    // Burst of white noise (the 'shh' of the shutter)
     const noise = audioContext.createBufferSource();
     noise.buffer = createNoiseBuffer(audioContext);
     const noiseGain = audioContext.createGain();
-    noiseGain.gain.setValueAtTime(0.0001, now);
-    noiseGain.gain.linearRampToValueAtTime(0.15, now + 0.02);
-    noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
-    
+    noiseGain.gain.setValueAtTime(0, now);
+    noiseGain.gain.linearRampToValueAtTime(0.3, now + 0.01);
+    noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
     noise.connect(noiseGain);
     noiseGain.connect(audioContext.destination);
     noise.start(now);
-    noise.stop(now + 0.13);
+    noise.stop(now + 0.09);
   };
 
   return {
     unlock: async () => {
       await ensureContext();
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        const dummy = new SpeechSynthesisUtterance('');
+        dummy.volume = 0;
+        window.speechSynthesis.speak(dummy);
+      }
     },
     startScan,
-    triggerPulse: async (muted: boolean) => {
-      if (muted) return;
-
-      const audioContext = await ensureContext();
-      if (!audioContext) return;
-
-      const pulseMaster = audioContext.createGain();
-      const now = audioContext.currentTime;
-      pulseMaster.gain.setValueAtTime(0.0001, now);
-      pulseMaster.gain.linearRampToValueAtTime(0.12, now + 0.025);
-      pulseMaster.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
-      pulseMaster.connect(audioContext.destination);
-
-      [660, 990].forEach((frequency, index) => {
-        const tone = audioContext.createOscillator();
-        const toneGain = audioContext.createGain();
-        const start = now + index * 0.045;
-
-        tone.type = 'sine';
-        tone.frequency.setValueAtTime(frequency, start);
-        toneGain.gain.setValueAtTime(0.0001, start);
-        toneGain.gain.linearRampToValueAtTime(0.04, start + 0.018);
-        toneGain.gain.exponentialRampToValueAtTime(0.0001, start + 0.24);
-        tone.connect(toneGain);
-        toneGain.connect(pulseMaster);
-        tone.start(start);
-        tone.stop(start + 0.28);
-      });
-
-      window.setTimeout(() => {
-        try {
-          pulseMaster.disconnect();
-        } catch {
-          // Rapid phase resets may disconnect this node first.
-        }
-      }, 520);
-    },
+    triggerPulse: async () => {},
     setMuted,
     stopScan,
+    playProcessing,
     playComplete,
     playShutter,
-    destroy: () => {
-      stopScan();
-      context?.close().catch(() => {});
-      context = null;
-    },
+    destroy: () => { stopScan(); }
   };
 };

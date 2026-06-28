@@ -19,8 +19,10 @@ export default function Hero({ onStart }: HeroProps) {
 
   return (
     <section className="relative min-h-screen w-full overflow-hidden bg-[#0a0a0a] font-sans">
-      {/* Background ambient light if needed, though the design is mostly dark */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_50%,rgba(163,230,53,0.03),transparent_40%)]" />
+      {/* Background ambient light and tech grid */}
+      <div className="absolute inset-0 bg-[#0a0a0a]" />
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(56,189,248,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(56,189,248,0.03)_1px,transparent_1px)] bg-[size:40px_40px] opacity-60" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_50%,rgba(56,189,248,0.1),transparent_50%)]" />
 
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-7xl flex-col items-center justify-between px-6 py-12 lg:flex-row lg:px-12">
 
@@ -32,8 +34,8 @@ export default function Hero({ onStart }: HeroProps) {
             transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
             className="text-5xl font-medium leading-[1.1] tracking-tight text-white sm:text-6xl lg:text-[4.5rem]"
           >
-            Face Geometry<br />
-            Analysis
+            Clinical Biometric<br />
+            <span className="text-[#38bdf8]">Face Analysis</span>
           </motion.h1>
 
           <motion.p
@@ -42,8 +44,8 @@ export default function Hero({ onStart }: HeroProps) {
             transition={{ duration: 0.8, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
             className="mt-6 text-xl font-light leading-relaxed text-[#a1a1aa] sm:text-2xl"
           >
-            Precision eyewear matching<br />
-            based on facial structure
+            AI-powered ophthalmic measurement engine<br />
+            for perfect anatomical frame matching.
           </motion.p>
 
           <motion.div
@@ -55,11 +57,10 @@ export default function Hero({ onStart }: HeroProps) {
             <button
               onClick={startScan}
               disabled={isLaunching}
-              className="group relative flex items-center justify-center rounded-xl border border-[#4ade80]/60 bg-[#0a2e18]/40 px-8 py-4 font-medium text-[#4ade80] transition-all duration-300 hover:bg-[#0a2e18]/60 disabled:opacity-50"
+              className="group relative flex items-center justify-center rounded-xl border border-[#38bdf8]/60 bg-[#082f49]/40 px-8 py-4 font-medium text-[#38bdf8] transition-all duration-300 hover:bg-[#082f49]/60 disabled:opacity-50"
             >
-              {/* Green Glow effect */}
-              <div className="absolute inset-0 -z-10 rounded-xl bg-[#4ade80]/10 blur-xl transition-all duration-300 group-hover:bg-[#4ade80]/25 group-hover:blur-2xl" />
-              <span className="text-lg tracking-wide">{isLaunching ? 'Starting...' : 'Start Face Scan'}</span>
+              <div className="absolute inset-0 -z-10 rounded-xl bg-[#38bdf8]/10 blur-xl transition-all duration-300 group-hover:bg-[#38bdf8]/25 group-hover:blur-2xl" />
+              <span className="text-lg tracking-wide">{isLaunching ? 'Initializing System...' : 'Start Clinical Scan'}</span>
             </button>
           </motion.div>
         </div>
@@ -72,20 +73,29 @@ export default function Hero({ onStart }: HeroProps) {
             transition={{ duration: 1.2, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
             className="relative w-full max-w-[600px] lg:max-w-[500px]"
           >
-            {/* Edge blending overlays to hide hard image borders */}
-            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-gradient-to-r from-[#0a0a0a] to-transparent sm:w-24" />
-            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 bg-gradient-to-l from-[#0a0a0a] to-transparent sm:w-24" />
-            <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-16 bg-gradient-to-b from-[#0a0a0a] to-transparent sm:h-24" />
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-16 bg-gradient-to-t from-[#0a0a0a] to-transparent sm:h-24" />
-
-            <Image
-              src="/anatomy1.png"
-              alt="Facial Anatomy Map"
-              width={800}
-              height={800}
-              className="h-auto w-full object-contain mix-blend-screen"
-              priority
-            />
+            {/* Smooth radial mask to fade out all edges perfectly */}
+            <div 
+              style={{ 
+                WebkitMaskImage: 'radial-gradient(ellipse at center, black 35%, transparent 70%)', 
+                maskImage: 'radial-gradient(ellipse at center, black 35%, transparent 70%)' 
+              }} 
+              className="relative flex items-center justify-center"
+            >
+              <Image
+                src="/anatomy1.png"
+                alt="Facial Anatomy Map"
+                width={800}
+                height={800}
+                className="h-auto w-full object-contain mix-blend-screen opacity-75 hue-rotate-60 brightness-125 saturate-150 contrast-125"
+                priority
+              />
+              {/* Medical scanner crosshairs */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-40">
+                <div className="absolute w-[60%] h-[60%] border border-[#38bdf8]/30 rounded-full animate-[spin_30s_linear_infinite] border-dashed" />
+                <div className="absolute w-full h-[1px] bg-gradient-to-r from-transparent via-[#38bdf8]/40 to-transparent" />
+                <div className="absolute h-full w-[1px] bg-gradient-to-b from-transparent via-[#38bdf8]/40 to-transparent" />
+              </div>
+            </div>
           </motion.div>
         </div>
 
@@ -93,7 +103,7 @@ export default function Hero({ onStart }: HeroProps) {
 
       {/* Screen flash transition on launch */}
       <motion.div
-        className="pointer-events-none fixed inset-0 z-50 bg-[#4ade80]"
+        className="pointer-events-none fixed inset-0 z-50 bg-[#38bdf8]"
         initial={{ opacity: 0 }}
         animate={{ opacity: isLaunching ? [0, 0.1, 0] : 0 }}
         transition={{ duration: 0.6, times: [0, 0.3, 1] }}

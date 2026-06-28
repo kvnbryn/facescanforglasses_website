@@ -30,7 +30,7 @@ type GlassesCategory = {
   stats: { jaw: string; cheek: string; ratio: string };
   recs: GlassesModel[];
 };
-type Phase = 'IDLE' | 'SCANNING' | 'PROCESSING' | 'RESULT' | 'ERROR';
+type Phase = 'IDLE' | 'SCANNING' | 'PROCESSING' | 'TRY_ON' | 'RESULT' | 'ERROR';
 type ActiveStep = 1;
 type FaceLandmark = { x: number; y: number; z?: number };
 type FaceMeshResults = { multiFaceLandmarks?: FaceLandmark[][] };
@@ -228,7 +228,14 @@ export default function Home() {
     confidence: string;
     lines: { top: string; left: string; width: string }[];
     metrics: Record<string, string>;
+    eyeLeft?: { x: number, y: number };
+    eyeRight?: { x: number, y: number };
+    faceLeft?: { x: number, y: number };
+    faceRight?: { x: number, y: number };
+    videoWidth?: number;
+    videoHeight?: number;
   } | null>(null);
+  const [selectedGlassesIndex, setSelectedGlassesIndex] = useState(0);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -539,6 +546,12 @@ export default function Home() {
     front: string | null;
     lines: { top: string; left: string; width: string }[];
     metrics: Record<string, string>;
+    eyeLeft?: { x: number, y: number };
+    eyeRight?: { x: number, y: number };
+    faceLeft?: { x: number, y: number };
+    faceRight?: { x: number, y: number };
+    videoWidth?: number;
+    videoHeight?: number;
   }>({ front: null, lines: [], metrics: {} });
 
   const onResults = (results: FaceMeshResults) => {
@@ -590,12 +603,15 @@ export default function Home() {
 
         if (currentPose === targetPose) {
           poseHoldCounterRef.current += 1;
+          const progress = Math.min((poseHoldCounterRef.current / 90) * 100, 100);
+          setScanProgress(Math.floor(progress));
         } else {
           poseHoldCounterRef.current = 0; // Reset completely if pose is lost for strict snapshot
+          setScanProgress(0);
         }
 
-        // SNAPSHOT LOGIC: Once pose held for ~1.5 seconds, trigger capture
-        if (poseHoldCounterRef.current >= 45) {
+        // SNAPSHOT LOGIC: Once pose held for ~3 seconds, trigger capture
+        if (poseHoldCounterRef.current >= 90) {
           isCapturingRef.current = true;
           
           const center = (p1: FaceLandmark, p2: FaceLandmark) => ({ x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 });
@@ -605,12 +621,14 @@ export default function Home() {
           const faceDist = Math.abs(landmarks[454].x - landmarks[234].x);
           const scale = 145.0 / faceDist; // mm per normalized unit
           
+          const getLeft = (x1: number, x2: number) => 1 - Math.max(x1, x2);
+          
           capturedImagesRef.current.lines = [
-            { top: `${landmarks[164].y * 100}%`, left: `${Math.min(landmarks[234].x, landmarks[454].x) * 100}%`, width: `${Math.abs(landmarks[454].x - landmarks[234].x) * 100}%` }, // Face Width
-            { top: `${((leftEyeCenter.y + rightEyeCenter.y) / 2) * 100}%`, left: `${Math.min(leftEyeCenter.x, rightEyeCenter.x) * 100}%`, width: `${Math.abs(rightEyeCenter.x - leftEyeCenter.x) * 100}%` }, // PD
-            { top: `${((landmarks[133].y + landmarks[362].y) / 2) * 100}%`, left: `${Math.min(landmarks[133].x, landmarks[362].x) * 100}%`, width: `${Math.abs(landmarks[362].x - landmarks[133].x) * 100}%` }, // ICD
-            { top: `${((landmarks[33].y + landmarks[263].y) / 2) * 100}%`, left: `${Math.min(landmarks[33].x, landmarks[263].x) * 100}%`, width: `${Math.abs(landmarks[263].x - landmarks[33].x) * 100}%` }, // OCD
-            { top: `${((landmarks[129].y + landmarks[358].y) / 2) * 100}%`, left: `${Math.min(landmarks[129].x, landmarks[358].x) * 100}%`, width: `${Math.abs(landmarks[358].x - landmarks[129].x) * 100}%` } // Nose
+            { top: `${landmarks[164].y * 100}%`, left: `${getLeft(landmarks[234].x, landmarks[454].x) * 100}%`, width: `${Math.abs(landmarks[454].x - landmarks[234].x) * 100}%` }, // Face Width
+            { top: `${((leftEyeCenter.y + rightEyeCenter.y) / 2) * 100}%`, left: `${getLeft(leftEyeCenter.x, rightEyeCenter.x) * 100}%`, width: `${Math.abs(rightEyeCenter.x - leftEyeCenter.x) * 100}%` }, // PD
+            { top: `${((landmarks[133].y + landmarks[362].y) / 2) * 100}%`, left: `${getLeft(landmarks[133].x, landmarks[362].x) * 100}%`, width: `${Math.abs(landmarks[362].x - landmarks[133].x) * 100}%` }, // ICD
+            { top: `${((landmarks[33].y + landmarks[263].y) / 2) * 100}%`, left: `${getLeft(landmarks[33].x, landmarks[263].x) * 100}%`, width: `${Math.abs(landmarks[263].x - landmarks[33].x) * 100}%` }, // OCD
+            { top: `${((landmarks[129].y + landmarks[358].y) / 2) * 100}%`, left: `${getLeft(landmarks[129].x, landmarks[358].x) * 100}%`, width: `${Math.abs(landmarks[358].x - landmarks[129].x) * 100}%` } // Nose
           ];
           
           capturedImagesRef.current.metrics = {
@@ -655,14 +673,22 @@ export default function Home() {
           const snapCtx = snapCanvas.getContext('2d');
           if (snapCtx) {
             // Draw raw unmirrored synced frame from results.image
+            snapCtx.translate(videoWidth, 0);
+            snapCtx.scale(-1, 1);
             snapCtx.drawImage((results as any).image, 0, 0, videoWidth, videoHeight);
-            snapCtx.drawImage(canvasRef.current, 0, 0);
 
             const captureUrl = snapCanvas.toDataURL('image/jpeg', 0.85);
             setCaptureOverlay({ image: captureUrl, step: currentStep });
             
             if (currentStep === 1) {
+              const p = (idx: number) => landmarks[idx];
               capturedImagesRef.current.front = captureUrl;
+              capturedImagesRef.current.eyeLeft = { x: 1 - p(33).x, y: p(33).y };
+              capturedImagesRef.current.eyeRight = { x: 1 - p(263).x, y: p(263).y };
+              capturedImagesRef.current.faceLeft = { x: 1 - p(234).x, y: p(234).y };
+              capturedImagesRef.current.faceRight = { x: 1 - p(454).x, y: p(454).y };
+              capturedImagesRef.current.videoWidth = videoWidth;
+              capturedImagesRef.current.videoHeight = videoHeight;
               setCapturedImages((prev) => ({ ...prev, front: captureUrl }));
             }
             
@@ -672,7 +698,6 @@ export default function Home() {
             if (captureTimeoutRef.current) window.clearTimeout(captureTimeoutRef.current);
             captureTimeoutRef.current = window.setTimeout(() => {
                setCaptureOverlay(null);
-               setScanProgress(100);
                if (resultsBuffer.current.length >= 1) {
                  finishScanning();
                }
@@ -715,6 +740,7 @@ export default function Home() {
     isScanningRef.current = false;
     scannerAudioRef.current?.stopScan();
     setPhase('PROCESSING');
+    scannerAudioRef.current?.playProcessing(isMuted).catch(() => {});
     addLogLine(setSystemLogs, 'All poses complete. Running frame compatibility solver.');
 
     const counts: Partial<Record<FaceShape, number>> = {};
@@ -738,9 +764,16 @@ export default function Home() {
         shape: bestShape,
         confidence,
         lines: capturedImagesRef.current.lines,
-        metrics: capturedImagesRef.current.metrics
+        metrics: capturedImagesRef.current.metrics,
+        eyeLeft: capturedImagesRef.current.eyeLeft,
+        eyeRight: capturedImagesRef.current.eyeRight,
+        faceLeft: capturedImagesRef.current.faceLeft,
+        faceRight: capturedImagesRef.current.faceRight,
+        videoWidth: capturedImagesRef.current.videoWidth,
+        videoHeight: capturedImagesRef.current.videoHeight
       });
-      setPhase('RESULT');
+      setSelectedGlassesIndex(0);
+      setPhase('TRY_ON');
       scannerAudioRef.current?.playComplete(isMuted).catch(() => {});
     }, 4500);
   };
@@ -764,7 +797,7 @@ export default function Home() {
         key={step.id}
         className={`relative flex w-full max-w-[420px] flex-col justify-start rounded-[1.25rem] border p-4 transition-all duration-300 mx-auto min-h-[120px] xl:min-h-[140px] ${
           isActive
-            ? 'border-2 border-[#4ade80] bg-[#4ade80]/5 shadow-[0_0_20px_rgba(74,222,128,0.15)] z-10'
+            ? 'border-2 border-[#38bdf8] bg-[#38bdf8]/5 shadow-[0_0_20px_rgba(74,222,128,0.15)] z-10'
             : 'border-zinc-800/60 bg-zinc-950/40 opacity-50'
         }`}
       >
@@ -804,7 +837,7 @@ export default function Home() {
       <div className="fixed bottom-6 left-6 z-[100]">
         <button
           onClick={() => setIsMuted(!isMuted)}
-          className="rounded-full border border-zinc-800/70 bg-zinc-950/70 p-3 text-emerald-300 backdrop-blur transition-colors hover:border-emerald-500/40"
+          className="rounded-full border border-zinc-800/70 bg-zinc-950/70 p-3 text-sky-300 backdrop-blur transition-colors hover:border-sky-500/40"
           aria-label={isMuted ? 'Unmute scanner audio' : 'Mute scanner audio'}
         >
           {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
@@ -830,13 +863,19 @@ export default function Home() {
 
           {/* Center Panel: Camera */}
           <section className="relative flex h-[82vh] lg:h-full w-full flex-col items-center justify-center p-2 lg:p-0">
-            <div className="relative mx-auto aspect-[3/4] sm:aspect-[4/5] lg:aspect-[3/4] h-full max-h-[85vh] w-full max-w-[500px] overflow-hidden rounded-[2rem] bg-black shadow-[0_0_50px_rgba(163,230,53,0.12)] border border-[#a3e635]/20">
+            <div className="relative mx-auto aspect-[3/4] sm:aspect-[4/5] lg:aspect-[3/4] h-full max-h-[85vh] w-full max-w-[500px] overflow-hidden rounded-[2rem] bg-black shadow-[0_0_50px_rgba(56,189,248,0.12)] border border-[#38bdf8]/20">
+              {/* Video Element */}
               <video
                 ref={videoRef}
                 playsInline
                 muted
                 autoPlay
-                className="camera-beauty-filter absolute inset-0 h-full w-full scale-x-[-1] object-cover opacity-90"
+                className="camera-beauty-filter contrast-[1.05] brightness-110 saturate-110 blur-[0.5px] absolute inset-0 h-full w-full scale-x-[-1] object-cover opacity-90"
+              />
+              {/* Canvas for processing */}
+              <canvas
+                ref={canvasRef}
+                className="camera-beauty-filter contrast-[1.05] brightness-110 saturate-110 blur-[0.5px] pointer-events-none absolute inset-0 h-full w-full scale-x-[-1] object-cover opacity-60"
               />
               <div className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(circle_at_50%_50%,transparent_40%,rgba(0,0,0,0.6))] mix-blend-multiply" />
               <canvas ref={canvasRef} className="absolute inset-0 z-10 h-full w-full scale-x-[-1] object-cover" />
@@ -844,7 +883,7 @@ export default function Home() {
               {phase === 'SCANNING' && !isCapturingRef.current && (
                 <button 
                   onClick={toggleCamera}
-                  className="absolute top-4 right-4 z-50 p-3 rounded-full bg-black/40 border border-[#a3e635]/30 text-[#a3e635] hover:bg-black/60 transition-colors backdrop-blur-md"
+                  className="absolute top-4 right-4 z-50 p-3 rounded-full bg-black/40 border border-[#38bdf8]/30 text-[#38bdf8] hover:bg-black/60 transition-colors backdrop-blur-md"
                 >
                   <SwitchCamera size={24} />
                 </button>
@@ -857,19 +896,19 @@ export default function Home() {
                   
                   {/* Laser Scanning Animation from top to bottom */}
                   <motion.div
-                    className="absolute left-0 right-0 h-1 bg-[#a3e635] shadow-[0_0_20px_rgba(163,230,53,1)]"
+                    className="absolute left-0 right-0 h-1 bg-[#38bdf8] shadow-[0_0_20px_rgba(163,230,53,1)]"
                     animate={{ top: ['-5%', '105%'] }}
                     transition={{ duration: 1.8, ease: 'linear', repeat: Infinity }}
                   />
                   <motion.div
-                    className="absolute left-0 right-0 h-32 bg-gradient-to-b from-transparent via-[#a3e635]/20 to-transparent"
+                    className="absolute left-0 right-0 h-32 bg-gradient-to-b from-transparent via-[#38bdf8]/20 to-transparent"
                     animate={{ top: ['-25%', '105%'] }}
                     transition={{ duration: 1.8, ease: 'linear', repeat: Infinity }}
                   />
 
-                  <div className="z-10 flex flex-col items-center bg-black/50 p-6 rounded-2xl backdrop-blur-md border border-[#a3e635]/30 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
-                    <Loader2 className="h-12 w-12 animate-spin text-[#a3e635]" />
-                    <p className="mt-4 font-mono text-sm uppercase tracking-widest text-[#a3e635]">Calculating Biometrics...</p>
+                  <div className="z-10 flex flex-col items-center bg-black/50 p-6 rounded-2xl backdrop-blur-md border border-[#38bdf8]/30 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
+                    <Loader2 className="h-12 w-12 animate-spin text-[#38bdf8]" />
+                    <p className="mt-4 font-mono text-sm uppercase tracking-widest text-[#38bdf8]">Calculating Biometrics...</p>
                   </div>
                 </div>
               )}
@@ -918,14 +957,14 @@ export default function Home() {
                       initial={{ scale: 1.1, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
                       transition={{ delay: 0.1, duration: 0.4 }}
-                      className="z-50 border border-emerald-500/50 bg-black/60 px-6 py-3 backdrop-blur-md"
+                      className="z-50 border border-sky-500/50 bg-black/60 px-6 py-3 backdrop-blur-md"
                     >
-                      <span className="font-mono text-xl tracking-[0.3em] text-emerald-400">BIOMETRIC ACQUIRED</span>
+                      <span className="font-mono text-xl tracking-[0.3em] text-sky-400">BIOMETRIC ACQUIRED</span>
                     </motion.div>
                     
                     {/* Scanning Line effect on capture */}
                     <motion.div
-                      className="absolute top-0 left-0 right-0 h-1 bg-emerald-300 shadow-[0_0_20px_rgba(110,231,183,1)]"
+                      className="absolute top-0 left-0 right-0 h-1 bg-sky-300 shadow-[0_0_20px_rgba(110,231,183,1)]"
                       initial={{ top: '0%' }}
                       animate={{ top: '100%' }}
                       transition={{ duration: 0.8, ease: 'linear' }}
@@ -940,12 +979,12 @@ export default function Home() {
           {phase === 'SCANNING' && (
             <div className="flex lg:hidden flex-col gap-2 w-full max-w-[500px] mx-auto px-4">
               <div className="flex justify-between items-end px-1" style={{fontFamily: 'var(--font-kalam)'}}>
-                <span className="text-[#a3e635] text-xl font-bold drop-shadow-[0_0_8px_rgba(163,230,53,0.5)]">{scanProgress}%</span>
+                <span className="text-[#38bdf8] text-xl font-bold drop-shadow-[0_0_8px_rgba(163,230,53,0.5)]">{scanProgress}%</span>
                 <span className="text-zinc-400 text-xs tracking-widest uppercase">Processing</span>
               </div>
               <div className="h-3 w-full bg-black border border-zinc-800 rounded-full overflow-hidden shadow-[inset_0_0_5px_rgba(0,0,0,1)]">
                 <motion.div 
-                  className="h-full bg-[#a3e635] rounded-full shadow-[0_0_15px_rgba(163,230,53,0.9)]"
+                  className="h-full bg-[#38bdf8] rounded-full shadow-[0_0_15px_rgba(163,230,53,0.9)]"
                   animate={{ width: `${scanProgress}%` }}
                   transition={{ duration: 0.4 }}
                 />
@@ -967,7 +1006,7 @@ export default function Home() {
                       cy="50"
                       r="42"
                       fill="none"
-                      stroke="#a3e635"
+                      stroke="#38bdf8"
                       strokeWidth="8"
                       strokeLinecap="round"
                       strokeDasharray={circumference}
@@ -987,7 +1026,7 @@ export default function Home() {
               <div className="flex flex-col gap-1 text-sm xl:gap-2 xl:text-base">
                 <div>Facial Frame: <span id="metric-ff" className="text-white">3500</span></div>
                 <div>Mode: <span className="text-white">w76-66B</span></div>
-                <div>Analysis Mode: <span className="text-[#a3e635]">Active</span></div>
+                <div>Analysis Mode: <span className="text-[#38bdf8]">Active</span></div>
                 <div>Biometric Integrity: <span className="text-white">98%</span></div>
               </div>
 
@@ -1030,14 +1069,14 @@ export default function Home() {
                     
                     {/* Scanning Laser Line */}
                     <motion.div
-                      className="absolute left-0 right-0 h-0.5 bg-[#a3e635] shadow-[0_0_20px_rgba(163,230,53,1)]"
+                      className="absolute left-0 right-0 h-0.5 bg-[#38bdf8] shadow-[0_0_20px_rgba(163,230,53,1)]"
                       animate={{ top: ['0%', '100%', '0%'] }}
                       transition={{ duration: 2.5, repeat: Infinity, ease: 'linear' }}
                     />
                     
                     {/* Glowing overlay */}
                     <motion.div
-                      className="absolute left-0 right-0 h-16 bg-gradient-to-b from-transparent via-[#a3e635]/10 to-transparent"
+                      className="absolute left-0 right-0 h-16 bg-gradient-to-b from-transparent via-[#38bdf8]/10 to-transparent"
                       animate={{ top: ['-50%', '100%', '-50%'] }}
                       transition={{ duration: 2.5, repeat: Infinity, ease: 'linear' }}
                     />
@@ -1070,7 +1109,7 @@ export default function Home() {
           >
             <div className="flex w-full max-w-4xl flex-col items-center gap-8">
               <div className="w-full text-left">
-                <p className="font-mono text-sm uppercase tracking-widest text-emerald-400">Currently serving: <span className="text-white">Unknown</span></p>
+                <p className="font-mono text-sm uppercase tracking-widest text-sky-400">Currently serving: <span className="text-white">Unknown</span></p>
                 <div className="mt-2 flex items-center gap-2">
                   <span className="text-zinc-500">{'<'}</span>
                   <span className="font-medium tracking-wide text-zinc-200">Face Scanning & Customizing</span>
@@ -1085,7 +1124,7 @@ export default function Home() {
                   )}
                   {/* Sweeping Laser Animation */}
                   <motion.div
-                    className="pointer-events-none absolute left-0 right-0 h-1 bg-emerald-400 shadow-[0_0_20px_rgba(16,185,129,1)]"
+                    className="pointer-events-none absolute left-0 right-0 h-1 bg-sky-400 shadow-[0_0_20px_rgba(16,185,129,1)]"
                     animate={{ top: ['0%', '100%', '0%'] }}
                     transition={{ duration: 2, ease: 'linear', repeat: Infinity }}
                   />
@@ -1096,7 +1135,7 @@ export default function Home() {
                 <span className="text-sm tracking-widest text-zinc-300">Processing, please wait...</span>
                 <div className="relative h-2 w-full overflow-hidden rounded-full bg-zinc-800">
                   <motion.div
-                    className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"
+                    className="h-full bg-sky-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"
                     initial={{ width: '0%' }}
                     animate={{ width: '100%' }}
                     transition={{ duration: 4.5, ease: 'easeInOut' }}
@@ -1115,10 +1154,115 @@ export default function Home() {
               <p className="mb-8 text-sm text-zinc-500">{errorMessage}</p>
               <button
                 onClick={() => window.location.reload()}
-                className="w-full border border-zinc-800 bg-zinc-950 py-3 font-mono text-xs uppercase tracking-[0.22em] text-zinc-200 transition-colors hover:border-emerald-500/40"
+                className="w-full border border-zinc-800 bg-zinc-950 py-3 font-mono text-xs uppercase tracking-[0.22em] text-zinc-200 transition-colors hover:border-sky-500/40"
               >
                 Reload System
               </button>
+            </div>
+          </motion.div>
+        )}
+
+        {phase === 'TRY_ON' && finalResult && (
+          <motion.div
+            key="tryon"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="fixed inset-0 z-[70] flex flex-col items-center justify-center bg-[#0a0a0a] p-4 lg:p-8"
+          >
+            <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+              <div className="absolute left-1/2 top-1/2 -z-10 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#38bdf8]/5 blur-[120px] transition-opacity duration-1000" />
+            </div>
+            <div className="w-full max-w-4xl text-left mb-6">
+              <p className="font-mono text-sm uppercase tracking-widest text-sky-400">AI Eyewear Reco & Try-on</p>
+              <div className="mt-2 flex items-center gap-2 cursor-pointer" onClick={handleReset}>
+                <span className="text-zinc-500">{'<'}</span>
+                <span className="font-medium tracking-wide text-zinc-200">Restart Session</span>
+              </div>
+            </div>
+
+            <div className="w-full max-w-4xl flex flex-col lg:flex-row gap-8 bg-[#111] p-6 lg:p-10 rounded-3xl border border-sky-500/30 shadow-[0_0_40px_rgba(14,165,233,0.1)]">
+              {/* Info Panel */}
+              <div className="w-full lg:w-1/3 flex flex-col gap-6">
+                <div className="flex items-center gap-4 bg-zinc-900/80 p-4 rounded-xl border border-zinc-800">
+                  <div className="w-20 h-20 bg-zinc-800 rounded-lg overflow-hidden shrink-0 p-2 flex items-center justify-center">
+                    <img src={resultData.recs[selectedGlassesIndex].img} className="w-full h-auto object-contain drop-shadow-md" alt="Glasses" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-sky-400 leading-tight mb-1">{resultData.recs[selectedGlassesIndex].name}</h3>
+                    <div className="text-xs text-zinc-400 font-mono">Shape: {finalResult.shape} Match</div>
+                  </div>
+                </div>
+                <div className="bg-zinc-900/50 p-5 rounded-xl border border-zinc-800 flex-1">
+                  <h4 className="text-sm font-bold tracking-widest uppercase text-zinc-400 mb-3">AI Selection Reason</h4>
+                  <p className="text-sm text-zinc-300 leading-relaxed">
+                    {resultData.recs[selectedGlassesIndex].reason}
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setPhase('RESULT')}
+                  className="w-full py-4 rounded-xl bg-sky-500 text-white font-bold tracking-wider hover:bg-sky-400 transition-colors shadow-[0_0_20px_rgba(14,165,233,0.3)]"
+                >
+                  VIEW FULL REPORT
+                </button>
+              </div>
+              
+              {/* Try On View */}
+              <div className="w-full lg:w-2/3 flex flex-col items-center">
+                <div className="relative w-full max-w-sm aspect-[3/4] bg-black rounded-2xl overflow-hidden border border-zinc-800">
+                  <img src={finalResult.frontImage} className="w-full h-full object-cover camera-beauty-filter contrast-[1.05] brightness-110 saturate-110 blur-[0.5px]" alt="User Face" />
+                  {/* Absolute positioning for Glasses overlay with accurate alignment */}
+                  {finalResult.videoWidth && finalResult.videoHeight && (
+                    <svg viewBox={`0 0 ${finalResult.videoWidth} ${finalResult.videoHeight}`} preserveAspectRatio="xMidYMid slice" className="absolute inset-0 w-full h-full z-10">
+                      {finalResult.eyeLeft && finalResult.eyeRight && finalResult.faceLeft && finalResult.faceRight && (() => {
+                        // Coordinates are already mapped to 1 - x
+                        const eyeMidX = (finalResult.eyeLeft.x + finalResult.eyeRight.x) / 2;
+                        const eyeMidY = (finalResult.eyeLeft.y + finalResult.eyeRight.y) / 2;
+                        const faceW = Math.abs(finalResult.faceRight.x - finalResult.faceLeft.x);
+                        
+                        const glassW = faceW * 1.05 * finalResult.videoWidth; // Scale by video width
+                        const glassH = glassW * 0.45; // Aspect ratio of glasses
+                        const absX = eyeMidX * finalResult.videoWidth;
+                        const absY = eyeMidY * finalResult.videoHeight;
+                        
+                        return (
+                          <image 
+                            href={resultData.recs[selectedGlassesIndex].img} 
+                            x={absX - glassW / 2} 
+                            y={absY - glassH / 2} 
+                            width={glassW} 
+                            height={glassH} 
+                          />
+                        );
+                      })()}
+                    </svg>
+                  )}
+                </div>
+                
+                {/* Carousel */}
+                <div className="mt-6 w-full max-w-sm">
+                  <h4 className="text-xs font-bold text-center uppercase tracking-widest text-zinc-500 mb-3">Recommended Frames</h4>
+                  <div className="flex justify-center gap-3 overflow-x-auto pb-2 px-2" style={{ scrollbarWidth: 'none' }}>
+                    {resultData.recs.map((rec, i) => (
+                      <div 
+                        key={i}
+                        onClick={() => setSelectedGlassesIndex(i)}
+                        className={`relative w-20 h-20 shrink-0 rounded-xl cursor-pointer transition-all duration-300 p-2 flex items-center justify-center bg-zinc-900 ${
+                          selectedGlassesIndex === i 
+                          ? 'border-2 border-sky-400 shadow-[0_0_15px_rgba(14,165,233,0.3)]' 
+                          : 'border border-zinc-800 opacity-60 hover:opacity-100'
+                        }`}
+                      >
+                        {selectedGlassesIndex === i && (
+                          <div className="absolute -top-2 -right-2 bg-sky-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
+                            {rec.score}%
+                          </div>
+                        )}
+                        <img src={rec.img} className="w-full h-auto object-contain" alt={rec.name} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           </motion.div>
         )}
@@ -1131,14 +1275,14 @@ export default function Home() {
             className="relative z-40 min-h-screen bg-[#0d0d0d] px-4 py-8 lg:px-8 lg:py-12 flex flex-col items-center justify-center"
           >
             <div className="w-full max-w-4xl text-left mb-6">
-              <p className="font-mono text-sm uppercase tracking-widest text-emerald-400">Currently serving: <span className="text-white">Unknown</span></p>
+              <p className="font-mono text-sm uppercase tracking-widest text-sky-400">Currently serving: <span className="text-white">Unknown</span></p>
               <div className="mt-2 flex items-center gap-2 cursor-pointer" onClick={handleReset}>
                 <span className="text-zinc-500">{'<'}</span>
                 <span className="font-medium tracking-wide text-zinc-200">Face Scanning & Customizing</span>
               </div>
             </div>
 
-            <div className="w-full max-w-4xl rounded-3xl border border-emerald-500/30 p-6 lg:p-10 shadow-[0_0_40px_rgba(16,185,129,0.05)] bg-[#111]">
+            <div className="w-full max-w-4xl rounded-3xl border border-sky-500/30 p-6 lg:p-10 shadow-[0_0_40px_rgba(16,185,129,0.05)] bg-[#111]">
               
               {/* Images with Overlays */}
               <div className="flex justify-center mb-10">
@@ -1152,7 +1296,7 @@ export default function Home() {
                       style={{ top: line.top, left: line.left, width: line.width }} 
                     />
                   ))}
-                  <div className="absolute top-[10%] bottom-[10%] left-1/2 w-px bg-emerald-500/50 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                  <div className="absolute top-[10%] bottom-[10%] left-1/2 w-px bg-sky-500/50 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
                 </div>
               </div>
 
@@ -1162,23 +1306,23 @@ export default function Home() {
               </div>
 
               <div className="flex justify-center gap-4 mb-10">
-                <span className="px-6 py-1.5 rounded-full border border-emerald-500/50 text-emerald-400 font-medium">Round</span>
-                <span className="px-6 py-1.5 rounded-full bg-emerald-500 text-white font-medium">{finalResult.shape}</span>
+                <span className="px-6 py-1.5 rounded-full border border-sky-500/50 text-sky-400 font-medium">Round</span>
+                <span className="px-6 py-1.5 rounded-full bg-sky-500 text-white font-medium">{finalResult.shape}</span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-5 max-w-2xl mx-auto mb-12">
                 {Object.entries(finalResult.metrics).map(([key, val], i) => (
                   <div key={key} className="flex items-center gap-4 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800/50">
-                    <span className="flex shrink-0 items-center justify-center w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold">{i + 1}</span>
+                    <span className="flex shrink-0 items-center justify-center w-7 h-7 rounded-full bg-sky-500/20 text-sky-400 text-xs font-bold">{i + 1}</span>
                     <span className="text-zinc-300 text-sm">{key}</span>
-                    <span className="ml-auto text-emerald-50 font-mono">{val}</span>
+                    <span className="ml-auto text-sky-50 font-mono">{val}</span>
                   </div>
                 ))}
               </div>
 
               <button
                 onClick={() => setShowReport(true)}
-                className="w-full max-w-md mx-auto block py-4 rounded-xl bg-emerald-500 text-white font-semibold text-lg hover:bg-emerald-400 transition-colors shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+                className="w-full max-w-md mx-auto block py-4 rounded-xl bg-sky-500 text-white font-semibold text-lg hover:bg-sky-400 transition-colors shadow-[0_0_20px_rgba(16,185,129,0.3)]"
               >
                 Generate Custom Parameters
               </button>
@@ -1197,7 +1341,7 @@ export default function Home() {
               {/* Report Header */}
               <div className="px-8 py-6 border-b border-zinc-200 flex flex-col items-center">
                 <div className="w-full flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2 text-emerald-600 font-bold text-xl cursor-pointer" onClick={() => setShowReport(false)}>
+                  <div className="flex items-center gap-2 text-sky-600 font-bold text-xl cursor-pointer" onClick={() => setShowReport(false)}>
                     <span className="text-2xl italic">D</span> Dibao Vision
                   </div>
                   <button onClick={handleReset} className="text-zinc-500 hover:text-black">
@@ -1214,16 +1358,16 @@ export default function Home() {
                 <div className="w-full flex justify-between text-sm text-zinc-600 px-4 mt-2">
                   <div>Analysis ID: <span className="text-black ml-2 font-mono">BIO-{Math.floor(Math.random() * 9000) + 1000}</span></div>
                   <div>System: <span className="text-black ml-2">AI-MediScan V2</span></div>
-                  <div>Accuracy: <span className="text-emerald-600 ml-2 font-mono">98.4%</span></div>
+                  <div>Accuracy: <span className="text-sky-600 ml-2 font-mono">98.4%</span></div>
                 </div>
               </div>
 
               {/* AI Face Shape Analysis */}
               <div className="px-10 py-8 border-b border-zinc-200">
-                <h3 className="text-lg font-bold text-zinc-800 border-l-4 border-emerald-500 pl-3 mb-6">AI Face Shape Analysis</h3>
+                <h3 className="text-lg font-bold text-zinc-800 border-l-4 border-sky-500 pl-3 mb-6">AI Face Shape Analysis</h3>
                 <div className="flex flex-col md:flex-row items-center gap-8">
                   <div className="w-full md:w-1/3 text-center md:text-left">
-                    <h4 className="text-2xl font-bold text-emerald-600 mb-2">{finalResult.shape}</h4>
+                    <h4 className="text-2xl font-bold text-sky-600 mb-2">{finalResult.shape}</h4>
                     <p className="text-sm text-zinc-500 mb-4">Biometric Scan Complete</p>
                     <p className="text-sm text-zinc-600 leading-relaxed">
                       {finalResult.shape === 'Oval' && 'Proportions are balanced with gently rounded contours. Highly versatile for most frame shapes.'}
@@ -1233,13 +1377,13 @@ export default function Home() {
                       {finalResult.shape === 'Oblong' && 'Face is notably longer than it is wide. Tall frames help break up the length.'}
                     </p>
                   </div>
-                  <div className="w-32 h-40 shrink-0 rounded-lg overflow-hidden border-2 border-emerald-500 p-1">
+                  <div className="w-32 h-40 shrink-0 rounded-lg overflow-hidden border-2 border-sky-500 p-1">
                     <img src={finalResult.frontImage} className="w-full h-full object-cover rounded" alt="Face ID" />
                   </div>
                   <div className="w-full md:w-auto flex-1 grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
                     {Object.entries(finalResult.metrics).slice(0, 6).map(([key, val], i) => (
                       <div key={key} className="flex items-center gap-2">
-                        <div className="w-4 h-4 shrink-0 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 text-[10px] font-bold">{i + 1}</div> 
+                        <div className="w-4 h-4 shrink-0 rounded-full bg-sky-100 flex items-center justify-center text-sky-600 text-[10px] font-bold">{i + 1}</div> 
                         <span className="text-zinc-500 truncate">{key}</span> 
                         <span className="font-mono ml-auto font-medium">{val}</span>
                       </div>
@@ -1260,11 +1404,11 @@ export default function Home() {
                   <>
               {/* Reco Frame Size Range */}
               <div className="px-10 py-8 border-b border-zinc-200">
-                <h3 className="text-lg font-bold text-zinc-800 border-l-4 border-emerald-500 pl-3 mb-6">Reco Frame Size Range</h3>
+                <h3 className="text-lg font-bold text-zinc-800 border-l-4 border-sky-500 pl-3 mb-6">Reco Frame Size Range</h3>
                 <div className="flex flex-col md:flex-row items-center gap-10">
                   <div className="w-full md:w-1/3">
                     {/* Minimalist Glasses Schematic */}
-                    <svg viewBox="0 0 200 100" className="w-full h-auto stroke-emerald-500 fill-none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg viewBox="0 0 200 100" className="w-full h-auto stroke-sky-500 fill-none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="20" y="20" width="70" height="40" rx="10" />
                       <rect x="110" y="20" width="70" height="40" rx="10" />
                       <path d="M90 40 Q100 30 110 40" />
@@ -1277,31 +1421,31 @@ export default function Home() {
                     </svg>
                   </div>
                   <div className="w-full md:w-2/3 grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
-                    <div className="flex justify-between items-center bg-zinc-50 p-2 rounded"><span className="text-zinc-500"><span className="text-emerald-500 font-bold mr-2">1</span>Bridge Width</span><span className="font-mono font-medium">{bridge} ± 2mm</span></div>
-                    <div className="flex justify-between items-center bg-zinc-50 p-2 rounded"><span className="text-zinc-500"><span className="text-emerald-500 font-bold mr-2">2</span>Bend Point Length</span><span className="font-mono font-medium">{bend} ± 5mm</span></div>
-                    <div className="flex justify-between items-center bg-zinc-50 p-2 rounded"><span className="text-zinc-500"><span className="text-emerald-500 font-bold mr-2">3</span>Lens Width</span><span className="font-mono font-medium">{lensW} ± 2mm</span></div>
-                    <div className="flex justify-between items-center bg-zinc-50 p-2 rounded"><span className="text-zinc-500"><span className="text-emerald-500 font-bold mr-2">4</span>Reco Temple Length</span><span className="font-mono font-medium">{temple} mm</span></div>
-                    <div className="flex justify-between items-center bg-zinc-50 p-2 rounded col-span-2"><span className="text-zinc-500"><span className="text-emerald-500 font-bold mr-2">5</span>Total Frame Width</span><span className="font-mono font-medium">{totalW} ± 5mm</span></div>
+                    <div className="flex justify-between items-center bg-zinc-50 p-2 rounded"><span className="text-zinc-500"><span className="text-sky-500 font-bold mr-2">1</span>Bridge Width</span><span className="font-mono font-medium">{bridge} ± 2mm</span></div>
+                    <div className="flex justify-between items-center bg-zinc-50 p-2 rounded"><span className="text-zinc-500"><span className="text-sky-500 font-bold mr-2">2</span>Bend Point Length</span><span className="font-mono font-medium">{bend} ± 5mm</span></div>
+                    <div className="flex justify-between items-center bg-zinc-50 p-2 rounded"><span className="text-zinc-500"><span className="text-sky-500 font-bold mr-2">3</span>Lens Width</span><span className="font-mono font-medium">{lensW} ± 2mm</span></div>
+                    <div className="flex justify-between items-center bg-zinc-50 p-2 rounded"><span className="text-zinc-500"><span className="text-sky-500 font-bold mr-2">4</span>Reco Temple Length</span><span className="font-mono font-medium">{temple} mm</span></div>
+                    <div className="flex justify-between items-center bg-zinc-50 p-2 rounded col-span-2"><span className="text-zinc-500"><span className="text-sky-500 font-bold mr-2">5</span>Total Frame Width</span><span className="font-mono font-medium">{totalW} ± 5mm</span></div>
                   </div>
                 </div>
               </div>
 
               {/* AI Frame Reco & Avoidance Guide */}
               <div className="px-10 py-8 bg-zinc-50">
-                <h3 className="text-lg font-bold text-zinc-800 border-l-4 border-emerald-500 pl-3 mb-6">AI Frame Reco & Avoidance Guide</h3>
+                <h3 className="text-lg font-bold text-zinc-800 border-l-4 border-sky-500 pl-3 mb-6">AI Frame Reco & Avoidance Guide</h3>
                 <div className="flex flex-col md:flex-row gap-6">
                   <div className="flex-1 bg-white p-6 rounded-xl border border-zinc-200 shadow-sm">
                     <h4 className="text-sm font-bold text-zinc-600 mb-4">Reco Frames</h4>
                     <div className="flex items-center gap-4 mb-4">
-                      <div className="px-4 py-2 bg-emerald-500 text-white rounded text-sm font-medium">Shape</div>
+                      <div className="px-4 py-2 bg-sky-500 text-white rounded text-sm font-medium">Shape</div>
                       <div className="px-4 py-2 border border-zinc-200 rounded text-sm text-zinc-700 bg-zinc-50">{recs.reco.shapes}</div>
                     </div>
-                    <p className="text-xs text-emerald-600">{recs.reco.desc}</p>
+                    <p className="text-xs text-sky-600">{recs.reco.desc}</p>
                   </div>
                   <div className="flex-1 bg-white p-6 rounded-xl border border-zinc-200 shadow-sm">
                     <h4 className="text-sm font-bold text-zinc-600 mb-4">Frames to Avoid</h4>
                     <div className="flex items-center gap-4 mb-4">
-                      <div className="px-4 py-2 bg-emerald-500 text-white rounded text-sm font-medium">Shape</div>
+                      <div className="px-4 py-2 bg-sky-500 text-white rounded text-sm font-medium">Shape</div>
                       <div className="px-4 py-2 border border-zinc-200 rounded text-sm text-zinc-700 bg-zinc-50">{recs.avoid.shapes}</div>
                     </div>
                     <p className="text-xs text-red-500">{recs.avoid.desc}</p>
@@ -1314,8 +1458,8 @@ export default function Home() {
 
               {/* Buttons */}
               <div className="px-10 py-6 bg-white flex gap-4">
-                <button className="flex-1 py-4 bg-emerald-500 text-white font-bold rounded-xl hover:bg-emerald-600 transition-colors">SAVE REPORT</button>
-                <button onClick={() => window.print()} className="flex-1 py-4 bg-emerald-500 text-white font-bold rounded-xl hover:bg-emerald-600 transition-colors">PRINT REPORT</button>
+                <button className="flex-1 py-4 bg-sky-500 text-white font-bold rounded-xl hover:bg-sky-600 transition-colors">SAVE REPORT</button>
+                <button onClick={() => window.print()} className="flex-1 py-4 bg-sky-500 text-white font-bold rounded-xl hover:bg-sky-600 transition-colors">PRINT REPORT</button>
               </div>
 
             </div>

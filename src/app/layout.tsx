@@ -21,7 +21,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className={`${kalam.variable} bg-[#0a0a0a] font-sans text-white antialiased selection:bg-[#4ade80]/30 selection:text-white`}>
+      <body className={`${kalam.variable} bg-[#0a0a0a] font-sans text-white antialiased selection:bg-[#38bdf8]/30 selection:text-white`}>
         <SmoothScroll>
           {children}
         </SmoothScroll>

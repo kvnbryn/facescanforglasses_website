@@ -4,12 +4,12 @@ import { motion } from 'framer-motion';
 
 export default function FaceScannerLottie() {
   return (
-    <div className="relative h-40 w-40 overflow-hidden rounded-full border border-[#a3e635]/20 bg-black/40 shadow-[0_0_30px_rgba(163,230,53,0.15)]">
+    <div className="relative h-40 w-40 overflow-hidden rounded-full border border-[#38bdf8]/20 bg-black/40 shadow-[0_0_30px_rgba(163,230,53,0.15)]">
       {/* Grid Background */}
       <div 
         className="absolute inset-0 opacity-20" 
         style={{
-          backgroundImage: 'linear-gradient(#a3e635 1px, transparent 1px), linear-gradient(90deg, #a3e635 1px, transparent 1px)',
+          backgroundImage: 'linear-gradient(#38bdf8 1px, transparent 1px), linear-gradient(90deg, #38bdf8 1px, transparent 1px)',
           backgroundSize: '20px 20px'
         }}
       />
@@ -17,7 +17,7 @@ export default function FaceScannerLottie() {
       {/* Face SVG Outline */}
       <svg 
         viewBox="0 0 100 120" 
-        className="absolute inset-0 h-full w-full p-6 text-[#a3e635]"
+        className="absolute inset-0 h-full w-full p-6 text-[#38bdf8]"
         fill="none" 
         stroke="currentColor" 
         strokeWidth="1.5"
@@ -61,7 +61,7 @@ export default function FaceScannerLottie() {
       ].map((dot, i) => (
         <motion.div
           key={i}
-          className="absolute h-1.5 w-1.5 rounded-full bg-[#a3e635] shadow-[0_0_8px_rgba(163,230,53,1)]"
+          className="absolute h-1.5 w-1.5 rounded-full bg-[#38bdf8] shadow-[0_0_8px_rgba(163,230,53,1)]"
           style={dot}
           animate={{ scale: [0, 1.5, 0], opacity: [0, 1, 0] }}
           transition={{ duration: 1.5, delay: i * 0.3, repeat: Infinity }}
@@ -70,7 +70,7 @@ export default function FaceScannerLottie() {
 
       {/* Scanning Laser */}
       <motion.div
-        className="absolute left-0 right-0 h-1 bg-[#a3e635] shadow-[0_0_20px_rgba(163,230,53,1)]"
+        className="absolute left-0 right-0 h-1 bg-[#38bdf8] shadow-[0_0_20px_rgba(163,230,53,1)]"
         animate={{ top: ['0%', '100%', '0%'] }}
         transition={{ duration: 2.5, repeat: Infinity, ease: "linear" }}
       />
