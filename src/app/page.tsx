@@ -1270,7 +1270,18 @@ export default function Home() {
                 </div>
                 <div className="flex gap-3">
                   <button 
-                    onClick={() => {}}
+                    onClick={() => {
+                      const content = `Optik Brightstone - Biometric Analysis\n======================================\nFace Shape: ${finalResult.shape}\n\nKey Metrics:\n${Object.entries(finalResult.metrics).map(([k, v]) => `- ${k}: ${v}`).join('\n')}\n\nGenerated on: ${new Date().toLocaleString()}`;
+                      const blob = new Blob([content], { type: 'text/plain' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `Optik_Brightstone_Report.txt`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                    }}
                     className="flex-1 py-4 rounded-xl bg-zinc-800 text-white font-bold tracking-wider hover:bg-zinc-700 transition-colors border border-zinc-700"
                   >
                     SAVE REPORT
@@ -1413,16 +1424,16 @@ export default function Home() {
             key="report"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="relative z-40 min-h-screen bg-[#f4f6f8] text-black px-4 py-10 lg:px-8 flex flex-col items-center"
+            className="relative z-40 min-h-screen bg-[#f4f6f8] print:bg-white text-black px-4 py-10 lg:px-8 print:p-0 flex flex-col items-center"
           >
-            <div className="w-full max-w-4xl bg-white rounded-3xl shadow-xl overflow-hidden border border-zinc-200">
+            <div className="w-full max-w-4xl bg-white rounded-3xl shadow-xl print:shadow-none print:border-none overflow-hidden border border-zinc-200">
               {/* Report Header */}
               <div className="px-8 py-6 border-b border-zinc-200 flex flex-col items-center">
                 <div className="w-full flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2 text-sky-600 font-bold text-xl cursor-pointer" onClick={() => setShowReport(false)}>
-                    <span className="text-2xl italic">D</span> Dibao Vision
+                    <span className="text-2xl font-bold tracking-tighter">OB</span> Optik Brightstone
                   </div>
-                  <button onClick={handleReset} className="text-zinc-500 hover:text-black">
+                  <button onClick={handleReset} className="text-zinc-500 hover:text-black print:hidden">
                     <Power size={20} />
                   </button>
                 </div>
@@ -1430,7 +1441,7 @@ export default function Home() {
                 
                 <div className="w-full flex justify-between text-sm text-zinc-600 border-t border-zinc-200 pt-4 px-4">
                   <div>Order #: <span className="text-black ml-2 font-mono">{Math.floor(Math.random() * 900000) + 100000}</span></div>
-                  <div>Store: <span className="text-black ml-2">Dibao Vision Center</span></div>
+                  <div>Store: <span className="text-black ml-2">Optik Brightstone Center</span></div>
                   <div>Date: <span className="text-black ml-2 font-mono">{new Date().toISOString().split('T')[0]}</span></div>
                 </div>
                 <div className="w-full flex justify-between text-sm text-zinc-600 px-4 mt-2">
@@ -1535,7 +1546,7 @@ export default function Home() {
               })()}
 
               {/* Buttons */}
-              <div className="px-10 py-6 bg-white flex gap-4">
+              <div className="px-10 py-6 bg-white flex gap-4 print:hidden">
                 <button onClick={() => setShowReport(false)} className="flex-1 py-4 bg-zinc-100 text-zinc-700 font-bold rounded-xl hover:bg-zinc-200 transition-colors">BACK TO TRY-ON</button>
                 <button onClick={() => window.print()} className="flex-1 py-4 bg-sky-500 text-white font-bold rounded-xl hover:bg-sky-600 transition-colors">PRINT NOW</button>
               </div>

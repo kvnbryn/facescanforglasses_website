@@ -10,8 +10,8 @@ const kalam = Kalam({
 });
 
 export const metadata: Metadata = {
-  title: "Face Geometry Analysis",
-  description: "Precision eyewear matching based on facial structure.",
+  title: "Optik Brightstone - AI Analyzer",
+  description: "AI Analyzer by Optik Brightstone for precision eyewear matching based on facial structure.",
 };
 
 export default function RootLayout({
