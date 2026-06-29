@@ -48,6 +48,7 @@ export const createScannerAudioController = (): ScannerAudioController => {
   const speak = (text: string) => {
     if (isMutedState || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
     window.speechSynthesis.cancel();
+    window.speechSynthesis.resume(); // Ensure engine is not stuck on iOS/Safari
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'en-US';
     utterance.pitch = 1.0;
@@ -91,51 +92,15 @@ export const createScannerAudioController = (): ScannerAudioController => {
 
   const playShutter = async (muted: boolean) => {
     setMuted(muted);
-    if (muted) return;
-    const audioContext = await ensureContext();
-    if (!audioContext) return;
-
-    const now = audioContext.currentTime;
-
-    // High frequency click (mechanical part 1)
-    const osc1 = audioContext.createOscillator();
-    osc1.type = 'square';
-    osc1.frequency.setValueAtTime(6000, now);
-    osc1.frequency.exponentialRampToValueAtTime(100, now + 0.02);
-    const gain1 = audioContext.createGain();
-    gain1.gain.setValueAtTime(0, now);
-    gain1.gain.linearRampToValueAtTime(0.8, now + 0.005);
-    gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.03);
-    osc1.connect(gain1);
-    gain1.connect(audioContext.destination);
-    osc1.start(now);
-    osc1.stop(now + 0.04);
-
-    // Lower frequency thud (mechanical part 2)
-    const osc2 = audioContext.createOscillator();
-    osc2.type = 'triangle';
-    osc2.frequency.setValueAtTime(400, now + 0.03);
-    osc2.frequency.exponentialRampToValueAtTime(50, now + 0.08);
-    const gain2 = audioContext.createGain();
-    gain2.gain.setValueAtTime(0, now + 0.03);
-    gain2.gain.linearRampToValueAtTime(0.6, now + 0.035);
-    gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-    osc2.connect(gain2);
-    gain2.connect(audioContext.destination);
-    osc2.start(now + 0.03);
-    osc2.stop(now + 0.11);
-
-    // Burst of white noise (the 'shh' of the shutter)
-    const noise = audioContext.createBufferSource();
-    noise.buffer = createNoiseBuffer(audioContext);
-    const noiseGain = audioContext.createGain();
-    noiseGain.gain.setValueAtTime(0, now);
-    noiseGain.gain.linearRampToValueAtTime(0.3, now + 0.01);
-    noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
-    noise.connect(noiseGain);
-    noiseGain.connect(audioContext.destination);
-    noise.start(now);
-    noise.stop(now + 0.09);
+    if (muted || typeof window === 'undefined') return;
+    
+    try {
+      const audio = new Audio('/Camerashutter.mp3');
+      audio.volume = 1.0;
+      await audio.play();
+    } catch (err) {
+      console.warn("Could not play shutter sound:", err);
+    }
   };
 
   return {

@@ -22,6 +22,64 @@ import Hero from '@/components/Hero';
 import ScannerHUD from '@/components/ScannerHUD';
 import { createScannerAudioController, type ScannerAudioController } from '@/lib/scannerAudio';
 
+const AILiquidOrb = () => {
+  return (
+    <div className="relative w-32 h-32 flex items-center justify-center">
+      <motion.div
+        animate={{
+          rotate: [0, 360],
+          borderRadius: ["40% 60% 70% 30% / 40% 50% 60% 50%", "60% 40% 30% 70% / 60% 30% 70% 40%", "50% 60% 60% 40% / 40% 50% 50% 60%", "40% 60% 70% 30% / 40% 50% 60% 50%"]
+        }}
+        transition={{ duration: 8, ease: "linear", repeat: Infinity }}
+        className="absolute inset-0 bg-gradient-to-tr from-indigo-600 via-purple-600 to-sky-400 opacity-80 mix-blend-screen blur-[2px]"
+      />
+      <motion.div
+        animate={{
+          rotate: [360, 0],
+          borderRadius: ["60% 40% 30% 70% / 60% 30% 70% 40%", "50% 60% 60% 40% / 40% 50% 50% 60%", "40% 60% 70% 30% / 40% 50% 60% 50%", "60% 40% 30% 70% / 60% 30% 70% 40%"]
+        }}
+        transition={{ duration: 10, ease: "linear", repeat: Infinity }}
+        className="absolute inset-0 bg-gradient-to-bl from-indigo-500 via-fuchsia-600 to-sky-300 opacity-80 mix-blend-screen blur-[2px] scale-95"
+      />
+      <div className="absolute inset-3 rounded-full bg-gradient-to-br from-indigo-900/60 to-purple-900/60 backdrop-blur-sm shadow-[0_0_30px_rgba(139,92,246,0.6)]" />
+      <div className="absolute inset-0 rounded-full border border-white/20 animate-[ping_3s_ease-in-out_infinite]" />
+      <span className="text-white font-bold text-4xl tracking-widest relative z-20 drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]">AI</span>
+    </div>
+  )
+}
+
+const ProcessLabel = ({ text, delay, className }: { text: string, delay: number, className?: string }) => {
+  const [status, setStatus] = useState("pending");
+  
+  useEffect(() => {
+    const startTimer = setTimeout(() => {
+      setStatus("active");
+    }, delay);
+    
+    const endTimer = setTimeout(() => {
+      setStatus("done");
+    }, delay + 1000);
+    
+    return () => { clearTimeout(startTimer); clearTimeout(endTimer); };
+  }, [delay]);
+  
+  if (status === "pending") return null;
+  
+  return (
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.8 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className={`absolute ${className} text-[10px] sm:text-xs px-2 py-1 rounded transition-colors duration-300 shadow-lg ${status === "active" ? "bg-zinc-800/80 border border-zinc-700 animate-pulse text-sky-300" : "bg-sky-900/80 border border-sky-500/50 text-white"}`}
+    >
+      {status === "active" ? (
+        <span className="flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> {text}...</span>
+      ) : (
+        <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-emerald-400" /> {text}</span>
+      )}
+    </motion.div>
+  )
+};
+
 type GlassesModel = { name: string; img: string; reason: string; score: number };
 type FaceShape = 'Oval' | 'Round' | 'Square' | 'Heart' | 'Oblong';
 type GlassesCategory = {
@@ -87,8 +145,7 @@ const GLASSES_DB: Record<FaceShape, GlassesCategory> = {
     stats: { jaw: 'Soft', cheek: 'Full', ratio: '1.05' },
     recs: [
       { name: 'Rectangular Sharp', img: '/glasses/Rectangular eyeglasses.webp', reason: 'Sudut tajam frame ini memberikan ilusi wajah yang lebih tirus dan profesional.', score: 97 },
-      { name: 'Wayfarer Bold', img: '/glasses/Wayfarer eyeglasses.webp', reason: 'Ketebalan frame memberikan definisi instan pada garis pipi Anda.', score: 94 },
-      { name: 'Shield Tech', img: '/glasses/Shield Sunglasses.webp', reason: 'Garis lurus visor memotong kebulatan wajah secara estetik.', score: 89 },
+      { name: 'Wayfarer Bold', img: '/glasses/Wayfarer eyeglasses.webp', reason: 'Ketebalan frame memberikan definisi instan pada garis pipi Anda.', score: 94 }
     ],
   },
   Square: {
@@ -116,9 +173,8 @@ const GLASSES_DB: Record<FaceShape, GlassesCategory> = {
     desc: 'Wajah dengan karakteristik panjang yang noble. Membutuhkan ilusi lebar horizontal, yang bisa didapatkan dari frame oversized atau gagang (temple) yang memiliki dekorasi.',
     stats: { jaw: 'Elongated', cheek: 'Flat', ratio: '1.60' },
     recs: [
-      { name: 'Shield Oversized', img: '/glasses/Shield Sunglasses.webp', reason: 'Menutupi area tengah wajah untuk memotong vertikalitas secara visual.', score: 97 },
       { name: 'Aviator Wide', img: '/glasses/Aviator eyeglasses.webp', reason: 'Bentuk melebar ke samping memberikan keseimbangan proporsi.', score: 94 },
-      { name: 'Rectangular', img: '/glasses/Rectangular eyeglasses.webp', reason: 'Menambah dimensi horizontal secara signifikan.', score: 91 },
+      { name: 'Rectangular', img: '/glasses/Rectangular eyeglasses.webp', reason: 'Menambah dimensi horizontal secara signifikan.', score: 91 }
     ],
   },
 };
@@ -619,14 +675,12 @@ export default function Home() {
           const faceDist = Math.abs(landmarks[454].x - landmarks[234].x);
           const scale = 145.0 / faceDist; // mm per normalized unit
           
-          const getLeft = (x1: number, x2: number) => 1 - Math.max(x1, x2);
-          
           capturedImagesRef.current.lines = [
-            { top: `${landmarks[164].y * 100}%`, left: `${getLeft(landmarks[234].x, landmarks[454].x) * 100}%`, width: `${Math.abs(landmarks[454].x - landmarks[234].x) * 100}%` }, // Face Width
-            { top: `${((leftEyeCenter.y + rightEyeCenter.y) / 2) * 100}%`, left: `${getLeft(leftEyeCenter.x, rightEyeCenter.x) * 100}%`, width: `${Math.abs(rightEyeCenter.x - leftEyeCenter.x) * 100}%` }, // PD
-            { top: `${((landmarks[133].y + landmarks[362].y) / 2) * 100}%`, left: `${getLeft(landmarks[133].x, landmarks[362].x) * 100}%`, width: `${Math.abs(landmarks[362].x - landmarks[133].x) * 100}%` }, // ICD
-            { top: `${((landmarks[33].y + landmarks[263].y) / 2) * 100}%`, left: `${getLeft(landmarks[33].x, landmarks[263].x) * 100}%`, width: `${Math.abs(landmarks[263].x - landmarks[33].x) * 100}%` }, // OCD
-            { top: `${((landmarks[129].y + landmarks[358].y) / 2) * 100}%`, left: `${getLeft(landmarks[129].x, landmarks[358].x) * 100}%`, width: `${Math.abs(landmarks[358].x - landmarks[129].x) * 100}%` } // Nose
+            { top: `${landmarks[164].y * 100}%`, left: `${Math.min(landmarks[234].x, landmarks[454].x) * 100}%`, width: `${Math.abs(landmarks[454].x - landmarks[234].x) * 100}%` }, // Face Width
+            { top: `${((leftEyeCenter.y + rightEyeCenter.y) / 2) * 100}%`, left: `${Math.min(leftEyeCenter.x, rightEyeCenter.x) * 100}%`, width: `${Math.abs(rightEyeCenter.x - leftEyeCenter.x) * 100}%` }, // PD
+            { top: `${((landmarks[133].y + landmarks[362].y) / 2) * 100}%`, left: `${Math.min(landmarks[133].x, landmarks[362].x) * 100}%`, width: `${Math.abs(landmarks[362].x - landmarks[133].x) * 100}%` }, // ICD
+            { top: `${((landmarks[33].y + landmarks[263].y) / 2) * 100}%`, left: `${Math.min(landmarks[33].x, landmarks[263].x) * 100}%`, width: `${Math.abs(landmarks[263].x - landmarks[33].x) * 100}%` }, // OCD
+            { top: `${((landmarks[129].y + landmarks[358].y) / 2) * 100}%`, left: `${Math.min(landmarks[129].x, landmarks[358].x) * 100}%`, width: `${Math.abs(landmarks[358].x - landmarks[129].x) * 100}%` } // Nose
           ];
           
           capturedImagesRef.current.metrics = {
@@ -671,8 +725,6 @@ export default function Home() {
           const snapCtx = snapCanvas.getContext('2d');
           if (snapCtx) {
             // Draw raw unmirrored synced frame from results.image
-            snapCtx.translate(videoWidth, 0);
-            snapCtx.scale(-1, 1);
             snapCtx.drawImage((results as any).image, 0, 0, videoWidth, videoHeight);
 
             const captureUrl = snapCanvas.toDataURL('image/jpeg', 0.85);
@@ -681,10 +733,10 @@ export default function Home() {
             if (currentStep === 1) {
               const p = (idx: number) => landmarks[idx];
               capturedImagesRef.current.front = captureUrl;
-              capturedImagesRef.current.eyeLeft = { x: 1 - p(33).x, y: p(33).y };
-              capturedImagesRef.current.eyeRight = { x: 1 - p(263).x, y: p(263).y };
-              capturedImagesRef.current.faceLeft = { x: 1 - p(234).x, y: p(234).y };
-              capturedImagesRef.current.faceRight = { x: 1 - p(454).x, y: p(454).y };
+              capturedImagesRef.current.eyeLeft = { x: p(33).x, y: p(33).y };
+              capturedImagesRef.current.eyeRight = { x: p(263).x, y: p(263).y };
+              capturedImagesRef.current.faceLeft = { x: p(234).x, y: p(234).y };
+              capturedImagesRef.current.faceRight = { x: p(454).x, y: p(454).y };
               capturedImagesRef.current.videoWidth = videoWidth;
               capturedImagesRef.current.videoHeight = videoHeight;
               setCapturedImages((prev) => ({ ...prev, front: captureUrl }));
@@ -771,9 +823,9 @@ export default function Home() {
         videoHeight: capturedImagesRef.current.videoHeight
       });
       setSelectedGlassesIndex(0);
-      setPhase('TRY_ON');
+      setPhase('RESULT');
       scannerAudioRef.current?.playComplete(isMuted).catch(() => {});
-    }, 4500);
+    }, 6500);
   };
 
   const handleReset = () => {
@@ -816,7 +868,7 @@ export default function Home() {
   };
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#111111] font-sans text-zinc-100">
+    <main className="relative min-h-screen overflow-x-hidden bg-[#111111] font-sans text-zinc-100">
       <HiddenPreloader />
 
       <Script
@@ -1107,7 +1159,7 @@ export default function Home() {
           >
             <div className="flex w-full max-w-4xl flex-col items-center gap-8">
               <div className="w-full text-left">
-                <p className="font-mono text-sm uppercase tracking-widest text-sky-400">Currently serving: <span className="text-white">Unknown</span></p>
+                <p className="font-mono text-sm uppercase tracking-widest text-sky-400">Biometric Profile: <span className="text-white">Analyzed</span></p>
                 <div className="mt-2 flex items-center gap-2">
                   <span className="text-zinc-500">{'<'}</span>
                   <span className="font-medium tracking-wide text-zinc-200">Face Scanning & Customizing</span>
@@ -1129,14 +1181,34 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* AI Analyzer Orb & Floating Metrics */}
+              <div className="relative mt-2 flex flex-col items-center w-full max-w-md">
+                <p className="text-sm text-zinc-300 mb-8 font-medium tracking-wide">Matching suitable frames based on facial information...</p>
+                
+                <div className="relative flex items-center justify-center w-full h-48">
+                  {/* Glowing AI Orb */}
+                  <AILiquidOrb />
+                  
+                  {/* Floating Process Labels */}
+                  <div className="absolute inset-0 z-0">
+                    <ProcessLabel text="Biometric Mapping" delay={0} className="top-2 left-0" />
+                    <ProcessLabel text="Nasal Bridge Depth" delay={800} className="top-6 right-0" />
+                    <ProcessLabel text="Pupillary Distance" delay={1600} className="top-20 left-0 -ml-8" />
+                    <ProcessLabel text="Jawline Contours" delay={2400} className="bottom-8 left-2" />
+                    <ProcessLabel text="Ocular Spacing" delay={3200} className="top-16 right-0 -mr-6" />
+                    <ProcessLabel text="Facial Symmetry" delay={4000} className="bottom-8 right-2" />
+                    <ProcessLabel text="Frame Compatibility" delay={4800} className="bottom-0 right-1/4" />
+                  </div>
+                </div>
+              </div>
+
               <div className="mt-8 flex w-full max-w-lg flex-col items-center gap-3">
-                <span className="text-sm tracking-widest text-zinc-300">Processing, please wait...</span>
                 <div className="relative h-2 w-full overflow-hidden rounded-full bg-zinc-800">
                   <motion.div
                     className="h-full bg-sky-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"
                     initial={{ width: '0%' }}
                     animate={{ width: '100%' }}
-                    transition={{ duration: 4.5, ease: 'easeInOut' }}
+                    transition={{ duration: 6.5, ease: 'easeInOut' }}
                   />
                 </div>
               </div>
@@ -1160,12 +1232,12 @@ export default function Home() {
           </motion.div>
         )}
 
-        {phase === 'TRY_ON' && finalResult && (
+        {phase === 'TRY_ON' && finalResult && !showReport && (
           <motion.div
             key="tryon"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="fixed inset-0 z-[70] flex flex-col items-center justify-center bg-[#0a0a0a] p-4 lg:p-8"
+            className="relative z-[70] min-h-screen flex flex-col items-center justify-center bg-[#0a0a0a] p-4 lg:p-8 py-10"
           >
             <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
               <div className="absolute left-1/2 top-1/2 -z-10 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#38bdf8]/5 blur-[120px] transition-opacity duration-1000" />
@@ -1182,8 +1254,8 @@ export default function Home() {
               {/* Info Panel */}
               <div className="w-full lg:w-1/3 flex flex-col gap-6">
                 <div className="flex items-center gap-4 bg-zinc-900/80 p-4 rounded-xl border border-zinc-800">
-                  <div className="w-20 h-20 bg-zinc-800 rounded-lg overflow-hidden shrink-0 p-2 flex items-center justify-center">
-                    <img src={resultData.recs[selectedGlassesIndex].img} className="w-full h-auto object-contain drop-shadow-md" alt="Glasses" />
+                  <div className="w-24 h-24 bg-zinc-200 rounded-2xl overflow-hidden shrink-0 p-2 flex items-center justify-center shadow-[0_0_15px_rgba(255,255,255,0.05)] relative">
+                    <img src={resultData.recs[selectedGlassesIndex].img} className="w-full h-auto object-contain drop-shadow-sm" alt="Glasses" />
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-sky-400 leading-tight mb-1">{resultData.recs[selectedGlassesIndex].name}</h3>
@@ -1196,17 +1268,25 @@ export default function Home() {
                     {resultData.recs[selectedGlassesIndex].reason}
                   </p>
                 </div>
-                <button 
-                  onClick={() => setPhase('RESULT')}
-                  className="w-full py-4 rounded-xl bg-sky-500 text-white font-bold tracking-wider hover:bg-sky-400 transition-colors shadow-[0_0_20px_rgba(14,165,233,0.3)]"
-                >
-                  VIEW FULL REPORT
-                </button>
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => {}}
+                    className="flex-1 py-4 rounded-xl bg-zinc-800 text-white font-bold tracking-wider hover:bg-zinc-700 transition-colors border border-zinc-700"
+                  >
+                    SAVE REPORT
+                  </button>
+                  <button 
+                    onClick={() => setShowReport(true)}
+                    className="flex-1 py-4 rounded-xl bg-sky-500 text-white font-bold tracking-wider hover:bg-sky-400 transition-colors shadow-[0_0_20px_rgba(14,165,233,0.3)]"
+                  >
+                    PRINT REPORT
+                  </button>
+                </div>
               </div>
               
               {/* Try On View */}
               <div className="w-full lg:w-2/3 flex flex-col items-center">
-                <div className="relative w-full max-w-sm aspect-[3/4] bg-black rounded-2xl overflow-hidden border border-zinc-800">
+                <div className={`relative w-full max-w-sm aspect-[3/4] bg-black rounded-2xl overflow-hidden border border-zinc-800 ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`}>
                   <img src={finalResult.frontImage} className="w-full h-full object-cover camera-beauty-filter contrast-[1.05] brightness-110 saturate-110 blur-[0.5px]" alt="User Face" />
                   {/* Absolute positioning for Glasses overlay with accurate alignment */}
                   {finalResult.videoWidth && finalResult.videoHeight && (
@@ -1217,7 +1297,7 @@ export default function Home() {
                         const eyeMidY = (finalResult.eyeLeft.y + finalResult.eyeRight.y) / 2;
                         const faceW = Math.abs(finalResult.faceRight.x - finalResult.faceLeft.x);
                         
-                        const glassW = faceW * 1.05 * finalResult.videoWidth; // Scale by video width
+                        const glassW = faceW * 1.85 * finalResult.videoWidth; // Scale by video width
                         const glassH = glassW * 0.45; // Aspect ratio of glasses
                         const absX = eyeMidX * finalResult.videoWidth;
                         const absY = eyeMidY * finalResult.videoHeight;
@@ -1239,23 +1319,23 @@ export default function Home() {
                 {/* Carousel */}
                 <div className="mt-6 w-full max-w-sm">
                   <h4 className="text-xs font-bold text-center uppercase tracking-widest text-zinc-500 mb-3">Recommended Frames</h4>
-                  <div className="flex justify-center gap-3 overflow-x-auto pb-2 px-2" style={{ scrollbarWidth: 'none' }}>
+                  <div className="flex justify-center gap-3 overflow-x-auto pb-2 pt-3 px-3" style={{ scrollbarWidth: 'none' }}>
                     {resultData.recs.map((rec, i) => (
                       <div 
                         key={i}
                         onClick={() => setSelectedGlassesIndex(i)}
-                        className={`relative w-20 h-20 shrink-0 rounded-xl cursor-pointer transition-all duration-300 p-2 flex items-center justify-center bg-zinc-900 ${
+                        className={`relative w-20 h-20 shrink-0 rounded-xl cursor-pointer transition-all duration-300 p-2 flex items-center justify-center ${
                           selectedGlassesIndex === i 
-                          ? 'border-2 border-sky-400 shadow-[0_0_15px_rgba(14,165,233,0.3)]' 
-                          : 'border border-zinc-800 opacity-60 hover:opacity-100'
+                          ? 'bg-zinc-100 border-2 border-sky-500 shadow-[0_0_15px_rgba(14,165,233,0.4)]' 
+                          : 'bg-zinc-300 border border-transparent opacity-70 hover:opacity-100 hover:bg-zinc-200'
                         }`}
                       >
                         {selectedGlassesIndex === i && (
-                          <div className="absolute -top-2 -right-2 bg-sky-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
+                          <div className="absolute -top-2 -right-2 bg-sky-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm z-10">
                             {rec.score}%
                           </div>
                         )}
-                        <img src={rec.img} className="w-full h-auto object-contain" alt={rec.name} />
+                        <img src={rec.img} className="w-full h-auto object-contain drop-shadow-sm" alt={rec.name} />
                       </div>
                     ))}
                   </div>
@@ -1273,7 +1353,7 @@ export default function Home() {
             className="relative z-40 min-h-screen bg-[#0d0d0d] px-4 py-8 lg:px-8 lg:py-12 flex flex-col items-center justify-center"
           >
             <div className="w-full max-w-4xl text-left mb-6">
-              <p className="font-mono text-sm uppercase tracking-widest text-sky-400">Currently serving: <span className="text-white">Unknown</span></p>
+              <p className="font-mono text-sm uppercase tracking-widest text-sky-400">Biometric Profile: <span className="text-white">Analyzed</span></p>
               <div className="mt-2 flex items-center gap-2 cursor-pointer" onClick={handleReset}>
                 <span className="text-zinc-500">{'<'}</span>
                 <span className="font-medium tracking-wide text-zinc-200">Face Scanning & Customizing</span>
@@ -1319,16 +1399,16 @@ export default function Home() {
               </div>
 
               <button
-                onClick={() => setShowReport(true)}
+                onClick={() => setPhase('TRY_ON')}
                 className="w-full max-w-md mx-auto block py-4 rounded-xl bg-sky-500 text-white font-semibold text-lg hover:bg-sky-400 transition-colors shadow-[0_0_20px_rgba(16,185,129,0.3)]"
               >
-                Generate Custom Parameters
+                VIRTUAL TRY-ON
               </button>
             </div>
           </motion.div>
         )}
 
-        {phase === 'RESULT' && finalResult && showReport && (
+        {(phase === 'RESULT' || phase === 'TRY_ON') && finalResult && showReport && (
           <motion.div
             key="report"
             initial={{ opacity: 0 }}
@@ -1375,7 +1455,7 @@ export default function Home() {
                       {finalResult.shape === 'Oblong' && 'Face is notably longer than it is wide. Tall frames help break up the length.'}
                     </p>
                   </div>
-                  <div className="w-32 h-40 shrink-0 rounded-lg overflow-hidden border-2 border-sky-500 p-1">
+                  <div className={`w-32 h-40 shrink-0 rounded-lg overflow-hidden border-2 border-sky-500 p-1 ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`}>
                     <img src={finalResult.frontImage} className="w-full h-full object-cover rounded" alt="Face ID" />
                   </div>
                   <div className="w-full md:w-auto flex-1 grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
@@ -1456,8 +1536,8 @@ export default function Home() {
 
               {/* Buttons */}
               <div className="px-10 py-6 bg-white flex gap-4">
-                <button className="flex-1 py-4 bg-sky-500 text-white font-bold rounded-xl hover:bg-sky-600 transition-colors">SAVE REPORT</button>
-                <button onClick={() => window.print()} className="flex-1 py-4 bg-sky-500 text-white font-bold rounded-xl hover:bg-sky-600 transition-colors">PRINT REPORT</button>
+                <button onClick={() => setShowReport(false)} className="flex-1 py-4 bg-zinc-100 text-zinc-700 font-bold rounded-xl hover:bg-zinc-200 transition-colors">BACK TO TRY-ON</button>
+                <button onClick={() => window.print()} className="flex-1 py-4 bg-sky-500 text-white font-bold rounded-xl hover:bg-sky-600 transition-colors">PRINT NOW</button>
               </div>
 
             </div>

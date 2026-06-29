@@ -32,10 +32,10 @@ export default function Hero({ onStart }: HeroProps) {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-            className="text-5xl font-medium leading-[1.1] tracking-tight text-white sm:text-6xl lg:text-[4.5rem]"
+            className="text-5xl font-bold leading-[1.1] tracking-tight text-white sm:text-6xl lg:text-[4.5rem]"
           >
-            Clinical Biometric<br />
-            <span className="text-[#38bdf8]">Face Analysis</span>
+            AI ANALYZER<br />
+            <span className="text-[#38bdf8] text-3xl sm:text-4xl lg:text-5xl font-medium tracking-normal mt-2 block">by OPTIK BRIGHTSTONE</span>
           </motion.h1>
 
           <motion.p
