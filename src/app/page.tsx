@@ -1270,25 +1270,8 @@ export default function Home() {
                 </div>
                 <div className="flex gap-3">
                   <button 
-                    onClick={() => {
-                      const content = `Optik Brightstone - Biometric Analysis\n======================================\nFace Shape: ${finalResult.shape}\n\nKey Metrics:\n${Object.entries(finalResult.metrics).map(([k, v]) => `- ${k}: ${v}`).join('\n')}\n\nGenerated on: ${new Date().toLocaleString()}`;
-                      const blob = new Blob([content], { type: 'text/plain' });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = `Optik_Brightstone_Report.txt`;
-                      document.body.appendChild(a);
-                      a.click();
-                      document.body.removeChild(a);
-                      URL.revokeObjectURL(url);
-                    }}
-                    className="flex-1 py-4 rounded-xl bg-zinc-800 text-white font-bold tracking-wider hover:bg-zinc-700 transition-colors border border-zinc-700"
-                  >
-                    SAVE REPORT
-                  </button>
-                  <button 
                     onClick={() => setShowReport(true)}
-                    className="flex-1 py-4 rounded-xl bg-sky-500 text-white font-bold tracking-wider hover:bg-sky-400 transition-colors shadow-[0_0_20px_rgba(14,165,233,0.3)]"
+                    className="w-full py-4 rounded-xl bg-sky-500 text-white font-bold tracking-wider hover:bg-sky-400 transition-colors shadow-[0_0_20px_rgba(14,165,233,0.3)]"
                   >
                     PRINT REPORT
                   </button>
@@ -1426,12 +1409,12 @@ export default function Home() {
             animate={{ opacity: 1 }}
             className="relative z-40 min-h-screen bg-[#f4f6f8] print:bg-white text-black px-4 py-10 lg:px-8 print:p-0 flex flex-col items-center"
           >
-            <div className="w-full max-w-4xl bg-white rounded-3xl shadow-xl print:shadow-none print:border-none overflow-hidden border border-zinc-200">
+            <div id="print-report-container" className="w-full max-w-4xl bg-white rounded-3xl shadow-xl print:shadow-none print:border-none overflow-hidden border border-zinc-200">
               {/* Report Header */}
               <div className="px-8 py-6 border-b border-zinc-200 flex flex-col items-center">
                 <div className="w-full flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2 text-sky-600 font-bold text-xl cursor-pointer" onClick={() => setShowReport(false)}>
-                    <span className="text-2xl font-bold tracking-tighter">OB</span> Optik Brightstone
+                  <div className="flex items-center gap-2 text-sky-600 font-bold text-xl cursor-pointer uppercase tracking-widest" onClick={() => setShowReport(false)}>
+                    Optik Brightstone
                   </div>
                   <button onClick={handleReset} className="text-zinc-500 hover:text-black print:hidden">
                     <Power size={20} />
@@ -1548,7 +1531,46 @@ export default function Home() {
               {/* Buttons */}
               <div className="px-10 py-6 bg-white flex gap-4 print:hidden">
                 <button onClick={() => setShowReport(false)} className="flex-1 py-4 bg-zinc-100 text-zinc-700 font-bold rounded-xl hover:bg-zinc-200 transition-colors">BACK TO TRY-ON</button>
-                <button onClick={() => window.print()} className="flex-1 py-4 bg-sky-500 text-white font-bold rounded-xl hover:bg-sky-600 transition-colors">PRINT NOW</button>
+                <button 
+                  onClick={async () => {
+                    try {
+                      const element = document.getElementById('print-report-container');
+                      if (!element) return;
+                      // @ts-ignore
+                      const html2pdfModule = await import('html2pdf.js');
+                      const html2pdf = html2pdfModule.default ? html2pdfModule.default : html2pdfModule;
+                      const opt = {
+                        margin:       [0, 0, 0, 0],
+                        filename:     'Optik_Brightstone_Report.pdf',
+                        image:        { type: 'jpeg', quality: 0.98 },
+                        html2canvas:  { scale: 2, useCORS: true },
+                        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+                      };
+                      const buttonsContainer = element.querySelector('.print\\\\:hidden');
+                      if (buttonsContainer) (buttonsContainer as HTMLElement).style.display = 'none';
+                      const pdfBlob = await html2pdf().set(opt).from(element).outputPdf('blob');
+                      if (buttonsContainer) (buttonsContainer as HTMLElement).style.display = 'flex';
+                      
+                      const file = new File([pdfBlob], "Optik_Brightstone_Report.pdf", { type: "application/pdf" });
+                      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                        await navigator.share({
+                          title: 'Optik Brightstone Face Scan Report',
+                          text: 'Here is my Face Scan and Custom Frame Report from Optik Brightstone!',
+                          files: [file]
+                        });
+                      } else {
+                        html2pdf().set(opt).from(element).save();
+                      }
+                    } catch (err) {
+                      console.error("Error sharing PDF:", err);
+                      window.print();
+                    }
+                  }}
+                  className="flex-1 py-4 bg-sky-500 text-white font-bold rounded-xl hover:bg-sky-600 transition-colors flex items-center justify-center gap-3"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+                  SHARE NOW
+                </button>
               </div>
 
             </div>
