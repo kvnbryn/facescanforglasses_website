@@ -942,15 +942,15 @@ export default function Home() {
                 playsInline
                 muted
                 autoPlay
-                className={`camera-beauty-filter contrast-[1.05] brightness-110 saturate-110 blur-[0.5px] absolute inset-0 h-full w-full object-cover opacity-90 ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`}
+                className="camera-beauty-filter contrast-[1.05] brightness-110 saturate-110 blur-[0.5px] absolute inset-0 h-full w-full object-cover opacity-90"
               />
               {/* Canvas for processing */}
               <canvas
                 ref={canvasRef}
-                className={`camera-beauty-filter contrast-[1.05] brightness-110 saturate-110 blur-[0.5px] pointer-events-none absolute inset-0 h-full w-full object-cover opacity-60 ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`}
+                className="camera-beauty-filter contrast-[1.05] brightness-110 saturate-110 blur-[0.5px] pointer-events-none absolute inset-0 h-full w-full object-cover opacity-60"
               />
               <div className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(circle_at_50%_50%,transparent_40%,rgba(0,0,0,0.6))] mix-blend-multiply" />
-              <canvas ref={canvasRef} className={`absolute inset-0 z-10 h-full w-full object-cover ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`} />
+              <canvas ref={canvasRef} className="absolute inset-0 z-10 h-full w-full object-cover" />
 
               {phase === 'SCANNING' && !isCapturingRef.current && (
                 <button
@@ -963,7 +963,7 @@ export default function Home() {
 
               {phase === 'PROCESSING' && (
                 <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/40 backdrop-blur-sm overflow-hidden">
-                  <img src={capturedImages.front || ''} className={`absolute inset-0 w-full h-full object-cover ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`} alt="Analysis Target" />
+                  <img src={capturedImages.front || ''} className="absolute inset-0 w-full h-full object-cover" alt="Analysis Target" />
                   <div className="absolute inset-0 bg-black/70 mix-blend-multiply" />
 
                   {/* Laser Scanning Animation from top to bottom */}
@@ -1024,7 +1024,7 @@ export default function Home() {
                     transition={{ duration: 0.3 }}
                     className="absolute inset-0 z-40 bg-black flex flex-col items-center justify-center overflow-hidden"
                   >
-                    <img src={captureOverlay.image} alt="Capture" className={`absolute inset-0 w-full h-full object-cover opacity-90 ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`} />
+                    <img src={captureOverlay.image} alt="Capture" className="absolute inset-0 w-full h-full object-cover opacity-90" />
                     <motion.div
                       initial={{ scale: 1.1, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
@@ -1302,7 +1302,7 @@ export default function Home() {
 
               {/* Try On View */}
               <div className="w-full lg:w-2/3 flex flex-col items-center">
-                <div className={`relative w-full max-w-sm aspect-[3/4] bg-black rounded-2xl overflow-hidden border border-zinc-800 ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`}>
+                <div className="relative w-full max-w-sm aspect-[3/4] bg-black rounded-2xl overflow-hidden border border-zinc-800">
                   <img src={finalResult.frontImage} className="w-full h-full object-cover camera-beauty-filter contrast-[1.05] brightness-110 saturate-110 blur-[0.5px]" alt="User Face" />
                   {/* Absolute positioning for Glasses overlay with accurate alignment */}
                   {finalResult.videoWidth && finalResult.videoHeight && (
@@ -1379,7 +1379,7 @@ export default function Home() {
 
               {/* Images with Overlays */}
               <div className="flex justify-center mb-10">
-                <div className={`relative w-full max-w-sm aspect-[3/4] rounded-2xl overflow-hidden bg-black border border-zinc-800 ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`}>
+                <div className="relative w-full max-w-sm aspect-[3/4] rounded-2xl overflow-hidden bg-black border border-zinc-800">
                   <img src={finalResult.frontImage} alt="Front" className="w-full h-full object-cover" />
                   {/* Measurement Overlays */}
                   {finalResult.lines.map((line, i) => (
