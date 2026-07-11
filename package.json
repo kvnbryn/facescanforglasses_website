@@ -17,6 +17,7 @@
     "face-api.js": "^0.22.2",
     "framer-motion": "^12.42.0",
     "html2pdf.js": "^0.14.0",
+    "jose": "^6.2.3",
     "lottie-react": "^2.4.1",
     "lucide-react": "^0.563.0",
     "next": "16.1.4",
