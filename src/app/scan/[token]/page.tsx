@@ -2,9 +2,9 @@ import { verifyToken } from '@/lib/jwt';
 import ScanApp from '@/components/ScanApp';
 import { redirect } from 'next/navigation';
 
-export default async function ScanPage({ params }: { params: { token: string } }) {
-  // Await the params in Next.js 15 (if applicable, but works fine in older versions too)
-  const token = params.token;
+export default async function ScanPage({ params }: { params: Promise<{ token: string }> }) {
+  const resolvedParams = await params;
+  const token = resolvedParams.token;
 
   if (!token) {
     redirect('/');
